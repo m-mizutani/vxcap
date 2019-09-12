@@ -11,7 +11,7 @@ import (
 	"honnef.co/go/pcap"
 )
 
-type dumpRecord func([]*packetRecord, io.Writer) error
+type dumpRecord func([]*packetData, io.Writer) error
 
 func getDumper(name string) (dumpRecord, error) {
 	switch name {
@@ -41,7 +41,7 @@ type jsonRecord struct {
 	RawData  []byte `json:"raw_data,omitempty"`
 }
 
-func dumpJSON(packets []*packetRecord, w io.Writer) error {
+func dumpJSON(packets []*packetData, w io.Writer) error {
 	for _, pkt := range packets {
 		var record jsonRecord
 		if netLayer := (*pkt.Packet).NetworkLayer(); netLayer != nil {
@@ -95,7 +95,7 @@ func (x pcapPayload) Payload() []byte {
 	return x
 }
 
-func dumpPcap(packets []*packetRecord, writer io.Writer) error {
+func dumpPcap(packets []*packetData, writer io.Writer) error {
 	w := pcap.NewWriter(writer)
 	w.Header.Network = pcap.DLT_EN10MB
 	if err := w.WriteHeader(); err != nil {
@@ -119,6 +119,6 @@ func dumpPcap(packets []*packetRecord, writer io.Writer) error {
 }
 
 /*
-func dumpGzipJSON([]*packetRecord, io.writer) error {}
-func dumpParquet([]*packetRecord, io.writer) error {}
+func dumpGzipJSON([]*packetData, io.writer) error {}
+func dumpParquet([]*packetData, io.writer) error {}
 */

@@ -14,15 +14,15 @@ type vxlanHeader struct {
 	Reserved           [1]byte
 }
 
-type packetRecord struct {
+type packetData struct {
 	Data      []byte
 	Packet    *gopacket.Packet
 	Header    vxlanHeader
 	Timestamp time.Time
 }
 
-func newPacketRecord(buf []byte) *packetRecord {
-	pkt := new(packetRecord)
+func newPacketData(buf []byte) *packetData {
+	pkt := new(packetData)
 	pkt.Timestamp = time.Now()
 
 	gopkt := gopacket.NewPacket(buf, layers.LayerTypeEthernet, gopacket.Lazy)

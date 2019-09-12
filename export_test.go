@@ -2,21 +2,21 @@
 package main
 
 var (
-	ParseVXLAN      = parseVXLAN
-	ListenVXLAN     = listenVXLAN
-	NewPacketRecord = newPacketRecord
-	DumpPcap        = dumpPcap
-	DumpJSON        = dumpJSON
+	ParseVXLAN    = parseVXLAN
+	ListenVXLAN   = listenVXLAN
+	NewPacketData = newPacketData
+	DumpPcap      = dumpPcap
+	DumpJSON      = dumpJSON
 )
 
 type EmitterArgument emitterArgument
-type PacketRecord packetRecord
+type PacketData packetData
 type JSONRecord jsonRecord
 
 func NewEmitter(args EmitterArgument) (recordEmitter, error) {
 	return newEmitter(emitterArgument(args))
 }
 
-func ToPacketRecordSlice(pkt *packetRecord) []*packetRecord {
-	return []*packetRecord{pkt}
+func ToPacketDataSlice(pkt *packetData) []*packetData {
+	return []*packetData{pkt}
 }

@@ -10,7 +10,7 @@ import (
 )
 
 type queue struct {
-	Pkt *packetRecord
+	Pkt *packetData
 	Err error
 }
 
@@ -21,12 +21,12 @@ const (
 	vxlanHeaderLength = 8
 )
 
-func parseVXLAN(raw []byte, length int) (*packetRecord, error) {
+func parseVXLAN(raw []byte, length int) (*packetData, error) {
 	if length < vxlanHeaderLength {
 		return nil, fmt.Errorf("Too short data for VXLAN header: %d", length)
 	}
 
-	pkt := newPacketRecord(raw[vxlanHeaderLength:length])
+	pkt := newPacketData(raw[vxlanHeaderLength:length])
 
 	buffer := bytes.NewBuffer(raw)
 	if err := binary.Read(buffer, binary.BigEndian, &pkt.Header); err != nil {

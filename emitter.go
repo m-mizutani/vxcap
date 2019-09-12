@@ -9,7 +9,7 @@ import (
 )
 
 type recordEmitter interface {
-	emit(*packetRecord) error
+	emit(*packetData) error
 	setDumper(dumpRecord)
 	getDumper() dumpRecord
 }
@@ -50,7 +50,7 @@ type fsEmitter struct {
 	Argument    emitterArgument
 	RotateLimit int
 	FlushSize   int
-	PktBuffer   []*packetRecord
+	PktBuffer   []*packetData
 }
 
 func newFsEmitter(args emitterArgument) *fsEmitter {
@@ -58,7 +58,7 @@ func newFsEmitter(args emitterArgument) *fsEmitter {
 	return &e
 }
 
-func (x *fsEmitter) emit(pkt *packetRecord) error {
+func (x *fsEmitter) emit(pkt *packetData) error {
 	x.PktBuffer = append(x.PktBuffer, pkt)
 
 	if len(x.PktBuffer) > x.FlushSize {
@@ -72,7 +72,7 @@ func (x *fsEmitter) emit(pkt *packetRecord) error {
 			return err
 		}
 
-		x.PktBuffer = []*packetRecord{}
+		x.PktBuffer = []*packetData{}
 	}
 
 	return nil
