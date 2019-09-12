@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
-	"time"
 
 	"github.com/pkg/errors"
 )
@@ -27,10 +26,7 @@ func parseVXLAN(raw []byte, length int) (*packetRecord, error) {
 		return nil, fmt.Errorf("Too short data for VXLAN header: %d", length)
 	}
 
-	pkt := new(packetRecord)
-	pkt.Timestamp = time.Now()
-	pkt.Data = make([]byte, length-vxlanHeaderLength)
-	copy(pkt.Data, raw[vxlanHeaderLength:length])
+	pkt := newPacketRecord(raw[vxlanHeaderLength:length], length-vxlanHeaderLength)
 
 	buffer := bytes.NewBuffer(raw)
 	if err := binary.Read(buffer, binary.BigEndian, &pkt.Header); err != nil {
