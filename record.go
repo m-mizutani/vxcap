@@ -21,15 +21,13 @@ type packetRecord struct {
 	Timestamp time.Time
 }
 
-func newPacketRecord(buf []byte, length int) *packetRecord {
+func newPacketRecord(buf []byte) *packetRecord {
 	pkt := new(packetRecord)
 	pkt.Timestamp = time.Now()
 
-	pkt.Data = make([]byte, length)
-	copy(pkt.Data, buf)
-
-	gopkt := gopacket.NewPacket(pkt.Data, layers.LayerTypeEthernet, gopacket.Lazy)
+	gopkt := gopacket.NewPacket(buf, layers.LayerTypeEthernet, gopacket.Lazy)
 	pkt.Packet = &gopkt
+	pkt.Data = (*pkt.Packet).Data()
 
 	return pkt
 }

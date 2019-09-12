@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 
+	"github.com/google/gopacket/layers"
 	"github.com/pkg/errors"
 	"honnef.co/go/pcap"
 )
@@ -42,13 +44,34 @@ type jsonRecord struct {
 func dumpJSON(packets []*packetRecord, w io.Writer) error {
 	for _, pkt := range packets {
 		var record jsonRecord
-		netLayer := (*pkt.Packet).NetworkLayer()
+		if netLayer := (*pkt.Packet).NetworkLayer(); netLayer != nil {
+			netFlow := netLayer.NetworkFlow()
+			src, dst := netFlow.Endpoints()
+			record.SrcAddr = src.String()
+			record.DstAddr = dst.String()
 
-		netFlow := netLayer.NetworkFlow()
-		src, dst := netFlow.Endpoints()
+			if ipv4, ok := netLayer.(*layers.IPv4); ok {
+				record.Protocol = ipv4.Protocol.String()
+			} else if ipv6, ok := netLayer.(*layers.IPv6); ok {
+				record.Protocol = ipv6.NextHeader.String()
+			}
+		}
 
-		record.SrcAddr = src.String()
-		record.DstAddr = dst.String()
+		if tpLayer := (*pkt.Packet).TransportLayer(); tpLayer != nil {
+			tpFlow := tpLayer.TransportFlow()
+			src, dst := tpFlow.Endpoints()
+			if n, err := strconv.Atoi(src.String()); err == nil {
+				record.SrcPort = n
+			}
+			if n, err := strconv.Atoi(dst.String()); err == nil {
+				record.DstPort = n
+			}
+		}
+
+		if app := (*pkt.Packet).ApplicationLayer(); app != nil {
+			record.RawData = app.Payload()
+			record.TextData = string(app.Payload())
+		}
 
 		data, err := json.Marshal(&record)
 		if err != nil {
@@ -57,6 +80,9 @@ func dumpJSON(packets []*packetRecord, w io.Writer) error {
 
 		if _, err := w.Write(data); err != nil {
 			return errors.Wrap(err, "Fail to write JSON data")
+		}
+		if _, err := w.Write([]byte("\n")); err != nil {
+			return errors.Wrap(err, "Fail to write JSON data (LF)")
 		}
 	}
 
