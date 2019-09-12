@@ -13,9 +13,9 @@ git:
 notifications:
   email: false
 
-before_script:
-  - go install github.com/golangci/golangci-lint/cmd/golangci-lint
+#before_script:
+#  - go install github.com/golangci/golangci-lint/cmd/golangci-lint
 
 script:
-  - golangci-lint run
+#  - golangci-lint run
   - go test -v

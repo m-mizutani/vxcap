@@ -10,7 +10,10 @@ type vxcap struct {
 }
 
 func newVxcap() *vxcap {
-	cap := vxcap{}
+	cap := vxcap{
+		RecvPort:  defaultVxlanPort,
+		QueueSize: defaultReceiverQueueSize,
+	}
 	return &cap
 }
 

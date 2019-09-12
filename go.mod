@@ -3,6 +3,7 @@ module github.com/m-mizutani/vxcap
 go 1.12
 
 require (
+	github.com/golangci/golangci-lint v1.18.0 // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/sirupsen/logrus v1.4.2
 	github.com/stretchr/testify v1.2.2

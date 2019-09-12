@@ -2,6 +2,6 @@ package main
 
 import "io"
 
-type writer interface {
-	write(w io.Writer) error
+type recordWriter interface {
+	write([]*packetRecord, io.Writer) error
 }
