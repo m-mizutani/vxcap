@@ -61,6 +61,7 @@ func listenVXLAN(port, queueSize int) chan *queue {
 			pkt, err := parseVXLAN(buf, n)
 			if err != nil {
 				logger.WithError(err).Warn("Fail to parse VXLAN data")
+				continue
 			}
 
 			q := new(queue)
