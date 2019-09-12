@@ -9,6 +9,7 @@ var (
 // nolint
 type EmitterArgument emitterArgument
 
+// nolint
 func NewEmitter(args EmitterArgument) (recordEmitter, error) {
 	return newEmitter(emitterArgument(args))
 }

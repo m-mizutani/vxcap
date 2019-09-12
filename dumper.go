@@ -72,15 +72,21 @@ func (x pcapPayload) Payload() []byte {
 func dumpPcap(packets []*packetRecord, writer io.Writer) error {
 	w := pcap.NewWriter(writer)
 	w.Header.Network = pcap.DLT_EN10MB
-	w.WriteHeader()
+	if err := w.WriteHeader(); err != nil {
+		return errors.Wrap(err, "Fail to write header of pcap")
+	}
 
 	for _, pkt := range packets {
 		p := pcapPayload(pkt.Data)
-		w.WritePacket(pcap.Packet{
+		pcapPkt := pcap.Packet{
 			// Specify a timestamp
 			Header: pcap.PacketHeader{Timestamp: pkt.Timestamp},
 			Data:   p,
-		})
+		}
+
+		if err := w.WritePacket(pcapPkt); err != nil {
+			return errors.Wrap(err, "Fail to write pcap data")
+		}
 	}
 
 	return nil

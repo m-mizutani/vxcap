@@ -1,6 +1,12 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/pkg/errors"
+)
 
 type recordEmitter interface {
 	emit(*packetRecord) error
@@ -41,7 +47,10 @@ func newEmitter(args emitterArgument) (recordEmitter, error) {
 type fsEmitter struct {
 	baseEmitter
 	dump        dumpRecord
+	Argument    emitterArgument
 	RotateLimit int
+	FlushSize   int
+	PktBuffer   []*packetRecord
 }
 
 func newFsEmitter(args emitterArgument) *fsEmitter {
@@ -50,5 +59,21 @@ func newFsEmitter(args emitterArgument) *fsEmitter {
 }
 
 func (x *fsEmitter) emit(pkt *packetRecord) error {
+	x.PktBuffer = append(x.PktBuffer, pkt)
+
+	if len(x.PktBuffer) > x.FlushSize {
+		fd, err := os.Create(filepath.Join(x.Argument.FsDirPath, x.Argument.FsFileName))
+		if err != nil {
+			return errors.Wrap(err, "Fail to create a dump file for emitter")
+		}
+		defer fd.Close()
+
+		if err := x.dump(x.PktBuffer, fd); err != nil {
+			return err
+		}
+
+		x.PktBuffer = []*packetRecord{}
+	}
+
 	return nil
 }
