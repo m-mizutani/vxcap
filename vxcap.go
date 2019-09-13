@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/pkg/errors"
 )
 
@@ -21,29 +19,7 @@ func newVxcap() *vxcap {
 	return &cap
 }
 
-func (x *vxcap) addEmitter(e recordEmitter) {
-	x.emitters = append(x.emitters, e)
-}
-
-func (x *vxcap) selfcheck() error {
-	if len(x.emitters) == 0 {
-		return fmt.Errorf("No emitter is found")
-	}
-
-	for _, emitter := range x.emitters {
-		if emitter.getDumper() == nil {
-			return fmt.Errorf("Found emitter having no dumper")
-		}
-	}
-
-	return nil
-}
-
-func (x *vxcap) start() error {
-	if err := x.selfcheck(); err != nil {
-		return err
-	}
-
+func (x *vxcap) start(proc *packetProcessor) error {
 	for q := range listenVXLAN(x.RecvPort, x.QueueSize) {
 		if q.Err != nil {
 			return errors.Wrap(q.Err, "Fail to receive UDP")

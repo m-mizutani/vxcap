@@ -13,15 +13,36 @@ import (
 
 type dumpRecord func([]*packetData, io.Writer) error
 
-func getDumper(name string) (dumpRecord, error) {
-	switch name {
-	case "json":
-		return dumpJSON, nil
-	case "pcap":
-		return dumpPcap, nil
+type dumper interface {
+	open(io.Writer) error
+	dump([]*packetData, io.Writer) error
+	close(io.Writer) error
+}
+
+func getDumper(base, name string) (dumper, error) {
+	switch base {
+	case "packet":
+		switch name {
+		case "json":
+			return &jsonPacketDumper{}, nil
+		case "pcap":
+			return &pcapDumper{}, nil
+		default:
+			return nil, fmt.Errorf("Invalid format name: %s", name)
+		}
+
 	default:
-		return nil, fmt.Errorf("Invalid dumpMethod name: %s", name)
+		return nil, fmt.Errorf("Invalid base name: %s", base)
 	}
+}
+
+type baseDumper struct{}
+
+func (x *baseDumper) open(io.Writer) error  { return nil }
+func (x *baseDumper) close(io.Writer) error { return nil }
+
+type jsonPacketDumper struct {
+	baseDumper
 }
 
 type jsonRecord struct {
@@ -41,7 +62,7 @@ type jsonRecord struct {
 	RawData  []byte `json:"raw_data,omitempty"`
 }
 
-func dumpJSON(packets []*packetData, w io.Writer) error {
+func (x *jsonPacketDumper) dump(packets []*packetData, w io.Writer) error {
 	for _, pkt := range packets {
 		var record jsonRecord
 		if netLayer := (*pkt.Packet).NetworkLayer(); netLayer != nil {
@@ -89,17 +110,36 @@ func dumpJSON(packets []*packetData, w io.Writer) error {
 	return nil
 }
 
+// pcapDumper is not concurrency safe for now
+type pcapDumper struct {
+	writer *pcap.Writer
+	baseDumper
+}
+
 type pcapPayload []byte
 
 func (x pcapPayload) Payload() []byte {
 	return x
 }
 
-func dumpPcap(packets []*packetData, writer io.Writer) error {
+func (x *pcapDumper) open(writer io.Writer) error {
 	w := pcap.NewWriter(writer)
 	w.Header.Network = pcap.DLT_EN10MB
 	if err := w.WriteHeader(); err != nil {
 		return errors.Wrap(err, "Fail to write header of pcap")
+	}
+	x.writer = w
+	return nil
+}
+
+func (x *pcapDumper) close(writer io.Writer) error {
+	x.writer = nil
+	return nil
+}
+
+func (x *pcapDumper) dump(packets []*packetData, writer io.Writer) error {
+	if x.writer == nil {
+		return fmt.Errorf("pcapDumper.writer is not set, assertion error")
 	}
 
 	for _, pkt := range packets {
@@ -110,7 +150,7 @@ func dumpPcap(packets []*packetData, writer io.Writer) error {
 			Data:   p,
 		}
 
-		if err := w.WritePacket(pcapPkt); err != nil {
+		if err := x.writer.WritePacket(pcapPkt); err != nil {
 			return errors.Wrap(err, "Fail to write pcap data")
 		}
 	}

@@ -35,7 +35,13 @@ func TestPcapDumpFileSystem(t *testing.T) {
 
 	w, err := os.Create("test_dumppcap_fs.pcap")
 	require.NoError(t, err)
-	err = vxcap.DumpPcap(vxcap.ToPacketDataSlice(pkt), w)
+
+	d := vxcap.PcapDumper{}
+	err = d.Open(w)
+	require.NoError(t, err)
+	err = d.Dump(vxcap.ToPacketDataSlice(pkt), w)
+	require.NoError(t, err)
+	err = d.Close(w)
 	require.NoError(t, err)
 }
 
@@ -47,9 +53,11 @@ func TestJsonDumpFileSystem(t *testing.T) {
 	payload := genSamplePacketData()
 	pkt := vxcap.NewPacketData(payload)
 
-	w, err := os.Create("test_dumpjson_fs.pcap")
+	w, err := os.Create("test_dumpjson_fs.json")
 	require.NoError(t, err)
-	err = vxcap.DumpJSON(vxcap.ToPacketDataSlice(pkt), w)
+
+	d := vxcap.JsonPacketDumper{}
+	err = d.Dump(vxcap.ToPacketDataSlice(pkt), w)
 	require.NoError(t, err)
 }
 
@@ -58,7 +66,9 @@ func TestJsonDumpBuffer(t *testing.T) {
 	pkt := vxcap.NewPacketData(payload)
 
 	buf := new(bytes.Buffer)
-	err := vxcap.DumpJSON(vxcap.ToPacketDataSlice(pkt), buf)
+
+	dumper := vxcap.JsonPacketDumper{}
+	err := dumper.Dump(vxcap.ToPacketDataSlice(pkt), buf)
 	require.NoError(t, err)
 
 	var d vxcap.JSONRecord

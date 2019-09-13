@@ -10,12 +10,22 @@ import (
 
 type recordEmitter interface {
 	emit(*packetData) error
-	setDumper(dumpRecord)
-	getDumper() dumpRecord
+	close() error
+	setDumper(dumper)
+	getDumper() dumper
 }
 
+type emitterOutputMode int
+
+const (
+	emitterOutputStream emitterOutputMode = iota
+	emitterOutputBatch  emitterOutputMode = iota
+)
+
 type emitterArgument struct {
-	Name string
+	Name       string
+	OutputMode emitterOutputMode
+	Dumper     dumper
 
 	// For fsEmitter
 	FsFileName   string
@@ -24,41 +34,48 @@ type emitterArgument struct {
 }
 
 type baseEmitter struct {
-	Dump dumpRecord
+	Dumper dumper
 }
 
-func (x *baseEmitter) setDumper(f dumpRecord) {
-	x.Dump = f
+func (x *baseEmitter) setDumper(f dumper) {
+	x.Dumper = f
 }
 
-func (x *baseEmitter) getDumper() dumpRecord {
-	return x.Dump
+func (x *baseEmitter) getDumper() dumper {
+	return x.Dumper
 }
 
 func newEmitter(args emitterArgument) (recordEmitter, error) {
+	var emitter recordEmitter
 	switch args.Name {
 	case "fs":
-		return newFsEmitter(args), nil
+		emitter = newFsBatchEmitter(args)
 	default:
 		return nil, fmt.Errorf("Invalid emitter name: %s", args.Name)
 	}
+
+	if args.Dumper == nil {
+		return nil, fmt.Errorf("No Dumper. Dumper is required for new emitter")
+	}
+
+	emitter.setDumper(args.Dumper)
+	return emitter, nil
 }
 
-type fsEmitter struct {
+type fsBatchEmitter struct {
 	baseEmitter
-	dump        dumpRecord
 	Argument    emitterArgument
 	RotateLimit int
 	FlushSize   int
 	PktBuffer   []*packetData
 }
 
-func newFsEmitter(args emitterArgument) *fsEmitter {
-	e := fsEmitter{}
+func newFsBatchEmitter(args emitterArgument) *fsBatchEmitter {
+	e := fsBatchEmitter{Argument: args}
 	return &e
 }
 
-func (x *fsEmitter) emit(pkt *packetData) error {
+func (x *fsBatchEmitter) emit(pkt *packetData) error {
 	x.PktBuffer = append(x.PktBuffer, pkt)
 
 	if len(x.PktBuffer) > x.FlushSize {
@@ -68,12 +85,22 @@ func (x *fsEmitter) emit(pkt *packetData) error {
 		}
 		defer fd.Close()
 
-		if err := x.dump(x.PktBuffer, fd); err != nil {
+		if err := x.Dumper.open(fd); err != nil {
+			return err
+		}
+		if err := x.Dumper.dump(x.PktBuffer, fd); err != nil {
+			return err
+		}
+		if err := x.Dumper.close(fd); err != nil {
 			return err
 		}
 
 		x.PktBuffer = []*packetData{}
 	}
 
+	return nil
+}
+
+func (x *fsBatchEmitter) close() error {
 	return nil
 }
