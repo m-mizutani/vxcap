@@ -5,13 +5,12 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
-	"time"
 
 	"github.com/pkg/errors"
 )
 
 type queue struct {
-	Pkt *packetRecord
+	Pkt *packetData
 	Err error
 }
 
@@ -22,15 +21,12 @@ const (
 	vxlanHeaderLength = 8
 )
 
-func parseVXLAN(raw []byte, length int) (*packetRecord, error) {
+func parseVXLAN(raw []byte, length int) (*packetData, error) {
 	if length < vxlanHeaderLength {
 		return nil, fmt.Errorf("Too short data for VXLAN header: %d", length)
 	}
 
-	pkt := new(packetRecord)
-	pkt.Timestamp = time.Now()
-	pkt.Data = make([]byte, length-vxlanHeaderLength)
-	copy(pkt.Data, raw[vxlanHeaderLength:length])
+	pkt := newPacketData(raw[vxlanHeaderLength:length])
 
 	buffer := bytes.NewBuffer(raw)
 	if err := binary.Read(buffer, binary.BigEndian, &pkt.Header); err != nil {
@@ -65,6 +61,7 @@ func listenVXLAN(port, queueSize int) chan *queue {
 			pkt, err := parseVXLAN(buf, n)
 			if err != nil {
 				logger.WithError(err).Warn("Fail to parse VXLAN data")
+				continue
 			}
 
 			q := new(queue)
