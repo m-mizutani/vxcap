@@ -9,23 +9,21 @@ import (
 )
 
 type recordEmitter interface {
-	emit(*packetData) error
+	emit([]*packetData) error
 	close() error
 	setDumper(dumper)
 	getDumper() dumper
 }
 
-type emitterOutputMode int
-
-const (
-	emitterOutputStream emitterOutputMode = iota
-	emitterOutputBatch  emitterOutputMode = iota
-)
+type emitterKey struct {
+	Name string
+	Mode string // batch or stream
+}
+type emitterConstructor func(emitterArgument) recordEmitter
 
 type emitterArgument struct {
-	Name       string
-	OutputMode emitterOutputMode
-	Dumper     dumper
+	Key    emitterKey
+	Dumper dumper
 
 	// For fsEmitter
 	FsFileName   string
@@ -46,13 +44,17 @@ func (x *baseEmitter) getDumper() dumper {
 }
 
 func newEmitter(args emitterArgument) (recordEmitter, error) {
-	var emitter recordEmitter
-	switch args.Name {
-	case "fs":
-		emitter = newFsBatchEmitter(args)
-	default:
-		return nil, fmt.Errorf("Invalid emitter name: %s", args.Name)
+	emitterMap := map[emitterKey]emitterConstructor{
+		{Name: "fs", Mode: "batch"}:  newFsBatchEmitter,
+		{Name: "fs", Mode: "stream"}: newFsStreamEmitter,
 	}
+
+	constructor, ok := emitterMap[args.Key]
+	if !ok {
+		return nil, fmt.Errorf("The pair is not supported: %v", args.Key)
+	}
+
+	emitter := constructor(args)
 
 	if args.Dumper == nil {
 		return nil, fmt.Errorf("No Dumper. Dumper is required for new emitter")
@@ -64,43 +66,77 @@ func newEmitter(args emitterArgument) (recordEmitter, error) {
 
 type fsBatchEmitter struct {
 	baseEmitter
-	Argument    emitterArgument
-	RotateLimit int
-	FlushSize   int
-	PktBuffer   []*packetData
+	Argument emitterArgument
 }
 
-func newFsBatchEmitter(args emitterArgument) *fsBatchEmitter {
+func newFsBatchEmitter(args emitterArgument) recordEmitter {
 	e := fsBatchEmitter{Argument: args}
 	return &e
 }
 
-func (x *fsBatchEmitter) emit(pkt *packetData) error {
-	x.PktBuffer = append(x.PktBuffer, pkt)
+func (x *fsBatchEmitter) emit(pkt []*packetData) error {
 
-	if len(x.PktBuffer) > x.FlushSize {
-		fd, err := os.Create(filepath.Join(x.Argument.FsDirPath, x.Argument.FsFileName))
-		if err != nil {
-			return errors.Wrap(err, "Fail to create a dump file for emitter")
-		}
-		defer fd.Close()
+	fd, err := os.Create(filepath.Join(x.Argument.FsDirPath, x.Argument.FsFileName))
+	if err != nil {
+		return errors.Wrap(err, "Fail to create a dump file for emitter")
+	}
+	defer fd.Close()
 
-		if err := x.Dumper.open(fd); err != nil {
-			return err
-		}
-		if err := x.Dumper.dump(x.PktBuffer, fd); err != nil {
-			return err
-		}
-		if err := x.Dumper.close(fd); err != nil {
-			return err
-		}
-
-		x.PktBuffer = []*packetData{}
+	if err := x.Dumper.open(fd); err != nil {
+		return err
+	}
+	if err := x.Dumper.dump(pkt, fd); err != nil {
+		return err
+	}
+	if err := x.Dumper.close(fd); err != nil {
+		return err
 	}
 
 	return nil
 }
 
 func (x *fsBatchEmitter) close() error {
+	return nil
+}
+
+type fsStreamEmitter struct {
+	baseEmitter
+	Argument    emitterArgument
+	RotateLimit int
+	fd          *os.File
+}
+
+func newFsStreamEmitter(args emitterArgument) recordEmitter {
+	e := fsStreamEmitter{Argument: args}
+	return &e
+}
+
+func (x *fsStreamEmitter) emit(packets []*packetData) error {
+	if x.fd == nil {
+		fd, err := os.Create(filepath.Join(x.Argument.FsDirPath, x.Argument.FsFileName))
+		if err != nil {
+			return errors.Wrap(err, "Fail to create a dump file for emitter")
+		}
+		x.fd = fd
+
+		if err := x.Dumper.open(x.fd); err != nil {
+			return err
+		}
+	}
+
+	if err := x.Dumper.dump(packets, x.fd); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (x *fsStreamEmitter) close() error {
+	defer x.fd.Close()
+
+	if x.fd != nil {
+		if err := x.Dumper.close(x.fd); err != nil {
+			return err
+		}
+	}
 	return nil
 }

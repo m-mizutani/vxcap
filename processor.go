@@ -6,15 +6,12 @@ type packetProcessor struct {
 }
 
 type packetProcessorArgument struct {
-	Format      string // pcap, json
-	Destination string // fs, s3, firehose
-	DumpBase    string // packet or session
+	DumperKey   dumperKey
 	EmitterArgs emitterArgument
 }
 
 func newPacketProcessor(args packetProcessorArgument) (*packetProcessor, error) {
-
-	dumper, err := getDumper(args.DumpBase, args.Format)
+	dumper, err := getDumper(args.DumperKey)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +31,7 @@ func newPacketProcessor(args packetProcessorArgument) (*packetProcessor, error) 
 }
 
 func (x *packetProcessor) put(pkt *packetData) error {
-	if err := x.emitter.emit(pkt); err != nil {
+	if err := x.emitter.emit([]*packetData{pkt}); err != nil {
 		return err
 	}
 

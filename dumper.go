@@ -11,29 +11,29 @@ import (
 	"honnef.co/go/pcap"
 )
 
-type dumpRecord func([]*packetData, io.Writer) error
-
 type dumper interface {
 	open(io.Writer) error
 	dump([]*packetData, io.Writer) error
 	close(io.Writer) error
 }
 
-func getDumper(base, name string) (dumper, error) {
-	switch base {
-	case "packet":
-		switch name {
-		case "json":
-			return &jsonPacketDumper{}, nil
-		case "pcap":
-			return &pcapDumper{}, nil
-		default:
-			return nil, fmt.Errorf("Invalid format name: %s", name)
-		}
+type dumperKey struct {
+	Format string
+	Target string // packet or session
+}
 
-	default:
-		return nil, fmt.Errorf("Invalid base name: %s", base)
+func getDumper(key dumperKey) (dumper, error) {
+	dumperMap := map[dumperKey]dumper{
+		{Format: "json", Target: "packet"}: &jsonPacketDumper{},
+		{Format: "pcap", Target: "packet"}: &pcapDumper{},
 	}
+
+	d, ok := dumperMap[key]
+	if !ok {
+		return nil, fmt.Errorf("The pair is not supported: %v", key)
+	}
+
+	return d, nil
 }
 
 type baseDumper struct{}
@@ -112,8 +112,8 @@ func (x *jsonPacketDumper) dump(packets []*packetData, w io.Writer) error {
 
 // pcapDumper is not concurrency safe for now
 type pcapDumper struct {
-	writer *pcap.Writer
-	baseDumper
+	writer     *pcap.Writer
+	baseDumper //nolint
 }
 
 type pcapPayload []byte

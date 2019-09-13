@@ -7,8 +7,6 @@ import (
 type vxcap struct {
 	RecvPort  int
 	QueueSize int
-
-	emitters []recordEmitter
 }
 
 func newVxcap() *vxcap {
@@ -25,10 +23,8 @@ func (x *vxcap) start(proc *packetProcessor) error {
 			return errors.Wrap(q.Err, "Fail to receive UDP")
 		}
 
-		for _, emitter := range x.emitters {
-			if err := emitter.emit(q.Pkt); err != nil {
-				return errors.Wrap(err, "Fail to emit packet")
-			}
+		if err := proc.put(q.Pkt); err != nil {
+			return errors.Wrap(err, "Fail to handle packet")
 		}
 	}
 

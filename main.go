@@ -14,7 +14,6 @@ const vxcapVersion = "0.0.1"
 func main() {
 	cap := newVxcap()
 	var args packetProcessorArgument
-	var dumperName string
 
 	app := cli.NewApp()
 	app.Name = "vxcap"
@@ -30,11 +29,15 @@ func main() {
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name: "emitter, e", Value: "fs",
-			Destination: &args.EmitterArgs.Name,
+			Destination: &args.EmitterArgs.Key.Name,
 		},
 		cli.StringFlag{
 			Name: "dumper, d", Value: "pcap",
-			Destination: &dumperName,
+			Destination: &args.DumperKey.Format,
+		},
+		cli.StringFlag{
+			Name: "target, t", Value: "packet",
+			Destination: &args.DumperKey.Target,
 		},
 		cli.IntFlag{
 			Name: "port, p", Value: defaultVxlanPort,
