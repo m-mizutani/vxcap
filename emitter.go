@@ -1,10 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -22,13 +30,21 @@ type emitterKey struct {
 type emitterConstructor func(emitterArgument) recordEmitter
 
 type emitterArgument struct {
-	Key    emitterKey
-	Dumper dumper
+	Key       emitterKey
+	Dumper    dumper
+	Extension string
 
 	// For fsEmitter
 	FsFileName   string
 	FsDirPath    string
 	FsRotateSize int
+
+	// FOr s3Emitter
+	AwsRegion       string
+	AwsS3Bucket     string
+	AwsS3Prefix     string
+	AwsAddTimeKey   bool
+	AwsS3FlushCount int
 }
 
 type baseEmitter struct {
@@ -45,6 +61,7 @@ func (x *baseEmitter) getDumper() dumper {
 
 func newEmitter(args emitterArgument) (recordEmitter, error) {
 	emitterMap := map[emitterKey]emitterConstructor{
+		{Name: "s3", Mode: "stream"}: newS3StreamEmitter,
 		{Name: "fs", Mode: "batch"}:  newFsBatchEmitter,
 		{Name: "fs", Mode: "stream"}: newFsStreamEmitter,
 	}
@@ -138,5 +155,90 @@ func (x *fsStreamEmitter) close() error {
 			return err
 		}
 	}
+	return nil
+}
+
+type s3StreamEmitter struct {
+	baseEmitter
+	Argument  emitterArgument
+	pktBuffer []*packetData
+}
+
+func newS3StreamEmitter(args emitterArgument) recordEmitter {
+	e := s3StreamEmitter{Argument: args}
+	return &e
+}
+
+func (x *s3StreamEmitter) flush() error {
+	var buf bytes.Buffer
+
+	reader, writer := io.Pipe()
+	errCh := make(chan error)
+
+	go func() {
+		defer writer.Close()
+		defer close(errCh)
+
+		if err := x.Dumper.open(&buf); err != nil {
+			errCh <- errors.Wrap(err, "Fail to open dumper for S3 object")
+		}
+		if err := x.Dumper.dump(x.pktBuffer, &buf); err != nil {
+			errCh <- errors.Wrap(err, "Fail to dump packets for S3 object")
+		}
+		if err := x.Dumper.close(&buf); err != nil {
+			errCh <- errors.Wrap(err, "Fail to close dumper for S3 object")
+		}
+	}()
+
+	ssn := session.Must(session.NewSession(&aws.Config{
+		Region: aws.String(x.Argument.AwsRegion),
+	}))
+
+	s3Key := x.Argument.AwsS3Prefix
+	now := time.Now().UTC()
+	if x.Argument.AwsAddTimeKey {
+		s3Key += now.Format("2006/01/02/15/")
+	}
+	s3Key += now.Format("20160102_150405_") +
+		strings.Replace(uuid.New().String(), "-", "_", -1) + "." +
+		x.Argument.Extension
+
+	uploader := s3manager.NewUploader(ssn)
+	resp, err := uploader.Upload(&s3manager.UploadInput{
+		Body:   reader,
+		Bucket: &x.Argument.AwsS3Bucket,
+		Key:    &s3Key,
+	})
+
+	if err != nil {
+		return errors.Wrap(err, "Fail to PutObject in Emitter")
+	}
+
+	if err := <-errCh; err != nil {
+		return err
+	}
+
+	logger.WithField("resp", resp).Debug("Uploaded S3 object")
+
+	return nil
+}
+
+func (x *s3StreamEmitter) emit(packets []*packetData) error {
+	x.pktBuffer = append(x.pktBuffer, packets...)
+
+	if len(x.pktBuffer) >= x.Argument.AwsS3FlushCount {
+		if err := x.flush(); err != nil {
+			return errors.Wrap(err, "Fail to upload object to S3")
+		}
+	}
+
+	return nil
+}
+
+func (x *s3StreamEmitter) close() error {
+	if err := x.flush(); err != nil {
+		return errors.Wrap(err, "Fail to upload object to S3 in closing")
+	}
+
 	return nil
 }

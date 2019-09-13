@@ -17,10 +17,16 @@ type emitterModeKey struct {
 	Format  string
 	Target  string
 }
+type emitterParams struct {
+	Mode      string
+	Extension string
+}
 
-var emitterModeMap = map[emitterModeKey]string{
-	{Emitter: "fs", Format: "pcap", Target: "packet"}: "stream",
-	{Emitter: "fs", Format: "json", Target: "packet"}: "stream",
+var emitterModeMap = map[emitterModeKey]emitterParams{
+	{Emitter: "fs", Format: "pcap", Target: "packet"}: {"stream", "pcap"},
+	{Emitter: "fs", Format: "json", Target: "packet"}: {"stream", "json"},
+	{Emitter: "s3", Format: "pcap", Target: "packet"}: {"stream", "pcap"},
+	{Emitter: "s3", Format: "json", Target: "packet"}: {"stream", "json"},
 }
 
 func newPacketProcessor(args packetProcessorArgument) (*packetProcessor, error) {
@@ -31,11 +37,12 @@ func newPacketProcessor(args packetProcessorArgument) (*packetProcessor, error) 
 		Target:  args.DumperKey.Target,
 	}
 
-	emitterMode, ok := emitterModeMap[modeKey]
+	params, ok := emitterModeMap[modeKey]
 	if !ok {
 		return nil, fmt.Errorf("The settings for emitter and dumper are not allowed: %v", modeKey)
 	}
-	args.EmitterArgs.Key.Mode = emitterMode
+	args.EmitterArgs.Key.Mode = params.Mode
+	args.EmitterArgs.Extension = params.Extension
 
 	// construct dumper and emitter
 	dumper, err := getDumper(args.DumperKey)

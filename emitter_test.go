@@ -13,17 +13,3 @@ func TestEmitterNoName(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, emitter)
 }
-
-/*
-func TestEmitterGetFsEmitter(t *testing.T) {
-	var args vxcap.EmitterArgument
-	args.Name = "fs"
-	emitter, err := vxcap.NewEmitter(args)
-	require.NoError(t, err)
-	assert.NotNil(t, emitter)
-
-	tp := reflect.TypeOf(emitter)
-	require.Equal(t, reflect.Ptr, tp.Kind())
-	assert.Equal(t, "fsEmitter", tp.Elem().Name())
-}
-*/
