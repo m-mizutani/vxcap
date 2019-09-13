@@ -1,4 +1,4 @@
-package main
+package vxcap
 
 import (
 	"bytes"
@@ -15,8 +15,8 @@ type queue struct {
 }
 
 const (
-	defaultReceiverQueueSize = 1024
-	defaultVxlanPort         = 4789
+	DefaultReceiverQueueSize = 1024
+	DefaultVxlanPort         = 4789
 
 	vxlanHeaderLength = 8
 )
@@ -60,7 +60,7 @@ func listenVXLAN(port, queueSize int) chan *queue {
 
 			pkt, err := parseVXLAN(buf, n)
 			if err != nil {
-				logger.WithError(err).Warn("Fail to parse VXLAN data")
+				Logger.WithError(err).Warn("Fail to parse VXLAN data")
 				continue
 			}
 

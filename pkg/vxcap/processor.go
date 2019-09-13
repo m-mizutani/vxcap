@@ -1,13 +1,16 @@
-package main
+package vxcap
 
 import "fmt"
 
-type packetProcessor struct {
-	Argument packetProcessorArgument
+// PacketProcessor controls both of dumper (log enconder) and emitter (log forwarder).
+// And it works as interface of log processing by Put() function.
+type PacketProcessor struct {
+	argument PacketProcessorArgument
 	emitter  recordEmitter
 }
 
-type packetProcessorArgument struct {
+// PacketProcessorArgument is argument to construct new PacketProcessor
+type PacketProcessorArgument struct {
 	DumperKey   dumperKey
 	EmitterArgs emitterArgument
 }
@@ -29,7 +32,9 @@ var emitterModeMap = map[emitterModeKey]emitterParams{
 	{Emitter: "s3", Format: "json", Target: "packet"}: {"stream", "json"},
 }
 
-func newPacketProcessor(args packetProcessorArgument) (*packetProcessor, error) {
+// NewPacketProcessor is constructor of PacketProcessor. Not only creating instance
+// but also setting up emitter and dumper.
+func NewPacketProcessor(args PacketProcessorArgument) (*PacketProcessor, error) {
 	// Choose emitter mode
 	modeKey := emitterModeKey{
 		Emitter: args.EmitterArgs.Key.Name,
@@ -56,15 +61,16 @@ func newPacketProcessor(args packetProcessorArgument) (*packetProcessor, error) 
 		return nil, err
 	}
 
-	proc := packetProcessor{
-		Argument: args,
+	proc := PacketProcessor{
+		argument: args,
 		emitter:  emitter,
 	}
 
 	return &proc, nil
 }
 
-func (x *packetProcessor) put(pkt *packetData) error {
+// Put method input a packet to emitter.
+func (x *PacketProcessor) Put(pkt *packetData) error {
 	if err := x.emitter.emit([]*packetData{pkt}); err != nil {
 		return err
 	}

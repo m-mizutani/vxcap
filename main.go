@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 
+	"github.com/m-mizutani/vxcap/pkg/vxcap"
+
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -12,8 +14,8 @@ var logger = logrus.New()
 const vxcapVersion = "0.0.1"
 
 func main() {
-	cap := newVxcap()
-	var args packetProcessorArgument
+	cap := vxcap.New()
+	var args vxcap.PacketProcessorArgument
 
 	app := cli.NewApp()
 	app.Name = "vxcap"
@@ -40,7 +42,7 @@ func main() {
 			Destination: &args.DumperKey.Target,
 		},
 		cli.IntFlag{
-			Name: "port, p", Value: defaultVxlanPort,
+			Name: "port, p", Value: vxcap.DefaultVxlanPort,
 			Destination: &cap.RecvPort,
 		},
 
@@ -60,12 +62,12 @@ func main() {
 	}
 
 	app.Action = func(c *cli.Context) error {
-		proc, err := newPacketProcessor(args)
+		proc, err := vxcap.NewPacketProcessor(args)
 		if err != nil {
 			return err
 		}
 
-		if err := cap.start(proc); err != nil {
+		if err := cap.Start(proc); err != nil {
 			return err
 		}
 		return nil

@@ -1,4 +1,4 @@
-package main_test
+package vxcap_test
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"net"
 	"testing"
 
-	vxcap "github.com/m-mizutani/vxcap"
+	"github.com/m-mizutani/vxcap/pkg/vxcap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

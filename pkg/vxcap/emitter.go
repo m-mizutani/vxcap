@@ -1,4 +1,4 @@
-package main
+package vxcap
 
 import (
 	"bytes"
@@ -218,7 +218,7 @@ func (x *s3StreamEmitter) flush() error {
 		return err
 	}
 
-	logger.WithField("resp", resp).Debug("Uploaded S3 object")
+	Logger.WithField("resp", resp).Debug("Uploaded S3 object")
 
 	return nil
 }
