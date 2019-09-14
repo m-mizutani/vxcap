@@ -95,6 +95,7 @@ func TestProcessorJsonS3Output(t *testing.T) {
 		Bucket: aws.String(config.AwsS3Bucket),
 		Prefix: aws.String(prefix),
 	})
+	require.NoError(t, err)
 
 	assert.Equal(t, 1, len(resp.Contents))
 
