@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -64,12 +65,22 @@ func loadAwsConfig(t *testing.T) *awsConfig {
 	return &config
 }
 
-func TestProcessorJsonS3Output(t *testing.T) {
-	payload := genSamplePacketData()
-	pkt := vxcap.NewPacketData(payload)
-
+func setupObjectsForAwsS3(t *testing.T) (*s3.S3, *awsConfig, string) {
 	config := loadAwsConfig(t)
 	prefix := config.AwsS3Prefix + uuid.New().String() + "/"
+
+	ssn := session.Must(session.NewSession(&aws.Config{
+		Region: aws.String(config.AwsRegion),
+	}))
+	s3client := s3.New(ssn)
+
+	return s3client, config, prefix
+}
+
+func TestProcessorJsonS3Output(t *testing.T) {
+	pkt := vxcap.NewPacketData(genSamplePacketData())
+
+	s3client, config, prefix := setupObjectsForAwsS3(t)
 	proc, err := vxcap.NewPacketProcessor(vxcap.PacketProcessorArgument{
 		DumperArgs: vxcap.DumperArguments{
 			Format: "json",
@@ -87,10 +98,6 @@ func TestProcessorJsonS3Output(t *testing.T) {
 	require.NoError(t, proc.Put(pkt))
 	require.NoError(t, proc.Shutdown())
 
-	ssn := session.Must(session.NewSession(&aws.Config{
-		Region: aws.String(config.AwsRegion),
-	}))
-	s3client := s3.New(ssn)
 	resp, err := s3client.ListObjectsV2(&s3.ListObjectsV2Input{
 		Bucket: aws.String(config.AwsS3Bucket),
 		Prefix: aws.String(prefix),
@@ -110,6 +117,62 @@ func TestProcessorJsonS3Output(t *testing.T) {
 	err = json.Unmarshal(raw, &jdata)
 	require.NoError(t, err)
 	assert.Equal(t, "167.71.184.66", jdata.SrcAddr)
+}
+
+func TestProcessorJsonS3FlushCount(t *testing.T) {
+	pkt := vxcap.NewPacketData(genSamplePacketData())
+
+	s3client, config, prefix := setupObjectsForAwsS3(t)
+	proc, err := vxcap.NewPacketProcessor(vxcap.PacketProcessorArgument{
+		DumperArgs: vxcap.DumperArguments{
+			Format: "json",
+			Target: "packet",
+		},
+		EmitterArgs: vxcap.EmitterArguments{
+			Name:            "s3",
+			AwsRegion:       config.AwsRegion,
+			AwsS3Bucket:     config.AwsS3Bucket,
+			AwsS3Prefix:     prefix,
+			AwsS3FlushCount: 3,
+		},
+	})
+	require.NoError(t, err)
+
+	for i := 0; i < 7; i++ {
+		require.NoError(t, proc.Put(pkt))
+	}
+	require.NoError(t, proc.Shutdown())
+
+	resp, err := s3client.ListObjectsV2(&s3.ListObjectsV2Input{
+		Bucket: aws.String(config.AwsS3Bucket),
+		Prefix: aws.String(prefix),
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, 3, len(resp.Contents))
+	bucket := aws.String(config.AwsS3Bucket)
+
+	count := 0
+
+	obj, err := s3client.GetObject(&s3.GetObjectInput{Bucket: bucket, Key: resp.Contents[0].Key})
+	require.NoError(t, err)
+	raw, err := ioutil.ReadAll(obj.Body)
+	require.NoError(t, err)
+	count += strings.Count(string(raw), "\n")
+
+	obj, err = s3client.GetObject(&s3.GetObjectInput{Bucket: bucket, Key: resp.Contents[1].Key})
+	require.NoError(t, err)
+	raw, err = ioutil.ReadAll(obj.Body)
+	require.NoError(t, err)
+	count += strings.Count(string(raw), "\n")
+
+	obj, err = s3client.GetObject(&s3.GetObjectInput{Bucket: bucket, Key: resp.Contents[2].Key})
+	require.NoError(t, err)
+	raw, err = ioutil.ReadAll(obj.Body)
+	require.NoError(t, err)
+	count += strings.Count(string(raw), "\n")
+
+	assert.Equal(t, 7, count)
 }
 
 func TestProcessorS3ConfigError(t *testing.T) {
