@@ -7,6 +7,7 @@ import "fmt"
 type PacketProcessor struct {
 	argument PacketProcessorArgument
 	emitter  recordEmitter
+	ready    bool
 }
 
 // PacketProcessorArgument is argument to construct new PacketProcessor
@@ -26,10 +27,11 @@ type emitterParams struct {
 }
 
 var emitterModeMap = map[emitterModeKey]emitterParams{
-	{Emitter: "fs", Format: "pcap", Target: "packet"}: {"stream", "pcap"},
-	{Emitter: "fs", Format: "json", Target: "packet"}: {"stream", "json"},
-	{Emitter: "s3", Format: "pcap", Target: "packet"}: {"stream", "pcap"},
-	{Emitter: "s3", Format: "json", Target: "packet"}: {"stream", "json"},
+	{Emitter: "fs", Format: "pcap", Target: "packet"}:       {"stream", "pcap"},
+	{Emitter: "fs", Format: "json", Target: "packet"}:       {"stream", "json"},
+	{Emitter: "s3", Format: "pcap", Target: "packet"}:       {"stream", "pcap"},
+	{Emitter: "s3", Format: "json", Target: "packet"}:       {"stream", "json"},
+	{Emitter: "firehose", Format: "json", Target: "packet"}: {"stream", "json"},
 }
 
 // NewPacketProcessor is constructor of PacketProcessor. Not only creating instance
@@ -69,8 +71,22 @@ func NewPacketProcessor(args PacketProcessorArgument) (*PacketProcessor, error) 
 	return &proc, nil
 }
 
+// Setup must be invoked before calling Put()
+func (x *PacketProcessor) Setup() error {
+	if err := x.emitter.setup(); err != nil {
+		return err
+	}
+
+	x.ready = true
+	return nil
+}
+
 // Put method input a packet to emitter.
 func (x *PacketProcessor) Put(pkt *packetData) error {
+	if !x.ready {
+		return fmt.Errorf("PacketProcessor is not ready, run Setup() at first")
+	}
+
 	if err := x.emitter.emit([]*packetData{pkt}); err != nil {
 		return err
 	}
@@ -80,7 +96,7 @@ func (x *PacketProcessor) Put(pkt *packetData) error {
 
 // Shutdown starts closing process of emitter.
 func (x *PacketProcessor) Shutdown() error {
-	if err := x.emitter.close(); err != nil {
+	if err := x.emitter.teardown(); err != nil {
 		return err
 	}
 

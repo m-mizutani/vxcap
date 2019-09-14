@@ -39,6 +39,7 @@ func TestProcessorPcapFsOutput(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	require.NoError(t, proc.Setup())
 	require.NoError(t, proc.Put(pkt))
 	require.NoError(t, proc.Shutdown())
 
@@ -95,6 +96,7 @@ func TestProcessorJsonS3Output(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	require.NoError(t, proc.Setup())
 	require.NoError(t, proc.Put(pkt))
 	require.NoError(t, proc.Shutdown())
 
@@ -138,6 +140,7 @@ func TestProcessorJsonS3FlushCount(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	require.NoError(t, proc.Setup())
 	for i := 0; i < 7; i++ {
 		require.NoError(t, proc.Put(pkt))
 	}

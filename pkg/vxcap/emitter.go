@@ -1,6 +1,7 @@
 package vxcap
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -10,14 +11,17 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/firehose"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 )
 
 type recordEmitter interface {
+	setup() error
 	emit([]*packetData) error
-	close() error
+	teardown() error
 	setDumper(dumper)
 	getDumper() dumper
 }
@@ -41,17 +45,26 @@ type EmitterArguments struct {
 	FsDirPath    string
 	FsRotateSize int
 
-	// FOr s3Emitter
-	AwsRegion       string
+	// For aws service
+	AwsRegion string
+
+	// For s3Emitter
 	AwsS3Bucket     string
 	AwsS3Prefix     string
 	AwsS3AddTimeKey bool
 	AwsS3FlushCount int
+
+	// For firehoseEmitter
+	AwsFirehoseName      string
+	AwsFirehoseFlushSize int
 }
 
 const (
 	// DefaultAwsS3FlushCount is limit of data buffer for S3 emitter.
 	DefaultAwsS3FlushCount = 4096
+
+	// DefaultAwsFirehoseFlushSize is threshold of flush to firehose.
+	DefaultAwsFirehoseFlushSize = 2 * 1024 * 1024 // 2MB
 )
 
 type baseEmitter struct {
@@ -66,11 +79,15 @@ func (x *baseEmitter) getDumper() dumper {
 	return x.Dumper
 }
 
+func (x *baseEmitter) setup() error    { return nil }
+func (x *baseEmitter) teardown() error { return nil }
+
 func newEmitter(args EmitterArguments) (recordEmitter, error) {
 	emitterMap := map[emitterKey]emitterConstructor{
-		{Name: "s3", Mode: "stream"}: newS3StreamEmitter,
-		{Name: "fs", Mode: "batch"}:  newFsBatchEmitter,
-		{Name: "fs", Mode: "stream"}: newFsStreamEmitter,
+		{Name: "s3", Mode: "stream"}:       newS3StreamEmitter,
+		{Name: "fs", Mode: "batch"}:        newFsBatchEmitter,
+		{Name: "fs", Mode: "stream"}:       newFsStreamEmitter,
+		{Name: "firehose", Mode: "stream"}: newFirehoseEmitter,
 	}
 
 	key := emitterKey{
@@ -126,10 +143,6 @@ func (x *fsBatchEmitter) emit(pkt []*packetData) error {
 	return nil
 }
 
-func (x *fsBatchEmitter) close() error {
-	return nil
-}
-
 type fsStreamEmitter struct {
 	baseEmitter
 	Argument    EmitterArguments
@@ -175,7 +188,7 @@ func (x *fsStreamEmitter) emit(packets []*packetData) error {
 	return nil
 }
 
-func (x *fsStreamEmitter) close() error {
+func (x *fsStreamEmitter) teardown() error {
 	defer x.fd.Close()
 
 	if x.fd != nil {
@@ -282,9 +295,92 @@ func (x *s3StreamEmitter) emit(packets []*packetData) error {
 	return nil
 }
 
-func (x *s3StreamEmitter) close() error {
+func (x *s3StreamEmitter) teardown() error {
 	if err := x.flush(); err != nil {
 		return errors.Wrap(err, "Fail to upload object to S3 in closing")
+	}
+
+	return nil
+}
+
+type firehoseEmitter struct {
+	baseEmitter
+	Argument       EmitterArguments
+	firehoseClient *firehose.Firehose
+	pktBuffer      [][]byte
+	pktBufferSize  int
+	flushSize      int
+}
+
+func newFirehoseEmitter(args EmitterArguments) (recordEmitter, error) {
+	e := firehoseEmitter{
+		Argument:  args,
+		flushSize: DefaultAwsFirehoseFlushSize,
+	}
+
+	return &e, nil
+}
+
+func (x *firehoseEmitter) flush() error {
+	recordsBatchInput := &firehose.PutRecordBatchInput{}
+	recordsBatchInput = recordsBatchInput.SetDeliveryStreamName(x.Argument.AwsFirehoseName)
+
+	records := []*firehose.Record{}
+
+	for _, buf := range x.pktBuffer {
+		record := &firehose.Record{Data: buf}
+		records = append(records, record)
+	}
+
+	recordsBatchInput = recordsBatchInput.SetRecords(records)
+
+	resp, err := x.firehoseClient.PutRecordBatch(recordsBatchInput)
+	if err != nil {
+		return errors.Wrap(err, "Fail")
+	}
+
+	Logger.WithField("resp", resp).Debug("Done Firehose PutRecordBatch")
+
+	x.pktBuffer = [][]byte{}
+	x.pktBufferSize = 0
+
+	return nil
+}
+
+func (x *firehoseEmitter) setup() error {
+	ssn := session.Must(session.NewSession(&aws.Config{
+		Region: aws.String(x.Argument.AwsRegion),
+	}))
+
+	x.firehoseClient = firehose.New(ssn)
+
+	return nil
+}
+
+func (x *firehoseEmitter) emit(pkt []*packetData) error {
+	for _, p := range pkt {
+		buf := new(bytes.Buffer)
+		if err := x.Dumper.dump([]*packetData{p}, buf); err != nil {
+			return errors.Wrap(err, "Fail to encode data for firehose record")
+		}
+
+		raw := buf.Bytes()
+		x.pktBuffer = append(x.pktBuffer, raw)
+		x.pktBufferSize += len(raw)
+
+		if x.pktBufferSize >= x.flushSize {
+			if err := x.flush(); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (x *firehoseEmitter) teardown() error {
+	if err := x.flush(); err != nil {
+		return err
 	}
 
 	return nil
