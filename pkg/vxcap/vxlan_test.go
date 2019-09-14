@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/m-mizutani/vxcap/pkg/vxcap"
 	"github.com/stretchr/testify/assert"
@@ -56,6 +57,8 @@ func TestVxlanListener(t *testing.T) {
 
 	port := 30000 + rand.Int()%10000
 	ch := vxcap.ListenVXLAN(port, 10)
+
+	time.Sleep(time.Second) // Wait for UDP server listening
 
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("localhost:%d", port))
 	require.NoError(t, err)
