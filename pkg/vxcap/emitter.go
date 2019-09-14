@@ -27,9 +27,10 @@ type emitterKey struct {
 	Name string
 	Mode string // batch or stream
 }
-type emitterConstructor func(emitterArgument) recordEmitter
+type emitterConstructor func(EmitterArguments) recordEmitter
 
-type emitterArgument struct {
+// EmitterArguments is for construction of emitter
+type EmitterArguments struct {
 	Key       emitterKey
 	Dumper    dumper
 	Extension string
@@ -59,7 +60,7 @@ func (x *baseEmitter) getDumper() dumper {
 	return x.Dumper
 }
 
-func newEmitter(args emitterArgument) (recordEmitter, error) {
+func newEmitter(args EmitterArguments) (recordEmitter, error) {
 	emitterMap := map[emitterKey]emitterConstructor{
 		{Name: "s3", Mode: "stream"}: newS3StreamEmitter,
 		{Name: "fs", Mode: "batch"}:  newFsBatchEmitter,
@@ -83,10 +84,10 @@ func newEmitter(args emitterArgument) (recordEmitter, error) {
 
 type fsBatchEmitter struct {
 	baseEmitter
-	Argument emitterArgument
+	Argument EmitterArguments
 }
 
-func newFsBatchEmitter(args emitterArgument) recordEmitter {
+func newFsBatchEmitter(args EmitterArguments) recordEmitter {
 	e := fsBatchEmitter{Argument: args}
 	return &e
 }
@@ -118,12 +119,12 @@ func (x *fsBatchEmitter) close() error {
 
 type fsStreamEmitter struct {
 	baseEmitter
-	Argument    emitterArgument
+	Argument    EmitterArguments
 	RotateLimit int
 	fd          *os.File
 }
 
-func newFsStreamEmitter(args emitterArgument) recordEmitter {
+func newFsStreamEmitter(args EmitterArguments) recordEmitter {
 	e := fsStreamEmitter{Argument: args}
 	return &e
 }
@@ -160,11 +161,11 @@ func (x *fsStreamEmitter) close() error {
 
 type s3StreamEmitter struct {
 	baseEmitter
-	Argument  emitterArgument
+	Argument  EmitterArguments
 	pktBuffer []*packetData
 }
 
-func newS3StreamEmitter(args emitterArgument) recordEmitter {
+func newS3StreamEmitter(args EmitterArguments) recordEmitter {
 	e := s3StreamEmitter{Argument: args}
 	return &e
 }

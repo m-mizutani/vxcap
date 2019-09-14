@@ -17,23 +17,38 @@ type dumper interface {
 	close(io.Writer) error
 }
 
+type dumperConstructor func(DumperArguments) dumper
+
+// DumperArguments is arguments for constructor of dumper.
+type DumperArguments struct {
+	Format string
+	Target string // packet or session
+
+	EnableJSONTextPayload bool
+	EnableJSONRawPayload  bool
+}
+
+var dumperMap = map[dumperKey]dumperConstructor{
+	{Format: "json", Target: "packet"}: newJSONPacketDumper,
+	{Format: "pcap", Target: "packet"}: newPcapDumper,
+}
+
 type dumperKey struct {
 	Format string
 	Target string // packet or session
 }
 
-func getDumper(key dumperKey) (dumper, error) {
-	dumperMap := map[dumperKey]dumper{
-		{Format: "json", Target: "packet"}: &jsonPacketDumper{},
-		{Format: "pcap", Target: "packet"}: &pcapDumper{},
+func newDumper(args DumperArguments) (dumper, error) {
+	key := dumperKey{
+		Format: args.Format,
+		Target: args.Target,
 	}
-
-	d, ok := dumperMap[key]
+	constructor, ok := dumperMap[key]
 	if !ok {
 		return nil, fmt.Errorf("The pair is not supported: %v", key)
 	}
 
-	return d, nil
+	return constructor(args), nil
 }
 
 type baseDumper struct{}
@@ -43,6 +58,11 @@ func (x *baseDumper) close(io.Writer) error { return nil }
 
 type jsonPacketDumper struct {
 	baseDumper
+	args DumperArguments
+}
+
+func newJSONPacketDumper(args DumperArguments) dumper {
+	return &jsonPacketDumper{args: args}
 }
 
 type jsonRecord struct {
@@ -58,8 +78,8 @@ type jsonRecord struct {
 	TCPSeq  uint32 `json:"tcp_seq,omitempty"`
 
 	// Data part
-	TextData string `json:"text_data,omitempty"`
-	RawData  []byte `json:"raw_data,omitempty"`
+	TextPayload string `json:"text,omitempty"`
+	RawPayload  []byte `json:"raw,omitempty"`
 }
 
 func (x *jsonPacketDumper) dump(packets []*packetData, w io.Writer) error {
@@ -90,8 +110,12 @@ func (x *jsonPacketDumper) dump(packets []*packetData, w io.Writer) error {
 		}
 
 		if app := (*pkt.Packet).ApplicationLayer(); app != nil {
-			record.RawData = app.Payload()
-			record.TextData = string(app.Payload())
+			if x.args.EnableJSONRawPayload {
+				record.RawPayload = app.Payload()
+			}
+			if x.args.EnableJSONTextPayload {
+				record.TextPayload = string(app.Payload())
+			}
 		}
 
 		data, err := json.Marshal(&record)
@@ -114,6 +138,10 @@ func (x *jsonPacketDumper) dump(packets []*packetData, w io.Writer) error {
 type pcapDumper struct {
 	writer     *pcap.Writer
 	baseDumper //nolint
+}
+
+func newPcapDumper(args DumperArguments) dumper {
+	return &pcapDumper{}
 }
 
 type pcapPayload []byte

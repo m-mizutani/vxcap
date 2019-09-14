@@ -36,12 +36,11 @@ func TestPcapDumpFileSystem(t *testing.T) {
 	w, err := os.Create("test_dumppcap_fs.pcap")
 	require.NoError(t, err)
 
-	d := vxcap.PcapDumper{}
-	err = d.Open(w)
-	require.NoError(t, err)
-	err = d.Dump(vxcap.ToPacketDataSlice(pkt), w)
-	require.NoError(t, err)
-	err = d.Close(w)
+	dumper := vxcap.NewJSONPacketDumper(vxcap.DumperArguments{
+		Format: "pcap",
+		Target: "packet",
+	})
+	err = vxcap.PcapDumperDump(dumper, vxcap.ToPacketDataSlice(pkt), w)
 	require.NoError(t, err)
 }
 
@@ -56,8 +55,11 @@ func TestJsonDumpFileSystem(t *testing.T) {
 	w, err := os.Create("test_dumpjson_fs.json")
 	require.NoError(t, err)
 
-	d := vxcap.JsonPacketDumper{}
-	err = d.Dump(vxcap.ToPacketDataSlice(pkt), w)
+	dumper := vxcap.NewJSONPacketDumper(vxcap.DumperArguments{
+		Format: "pcap",
+		Target: "packet",
+	})
+	err = vxcap.PcapDumperDump(dumper, vxcap.ToPacketDataSlice(pkt), w)
 	require.NoError(t, err)
 }
 
@@ -67,8 +69,12 @@ func TestJsonDumpBuffer(t *testing.T) {
 
 	buf := new(bytes.Buffer)
 
-	dumper := vxcap.JsonPacketDumper{}
-	err := dumper.Dump(vxcap.ToPacketDataSlice(pkt), buf)
+	dumper := vxcap.NewJSONPacketDumper(vxcap.DumperArguments{
+		Format:                "json",
+		Target:                "packet",
+		EnableJSONTextPayload: true,
+	})
+	err := vxcap.JSONPacketDumperDump(dumper, vxcap.ToPacketDataSlice(pkt), buf)
 	require.NoError(t, err)
 
 	var d vxcap.JSONRecord
@@ -80,6 +86,28 @@ func TestJsonDumpBuffer(t *testing.T) {
 	assert.Equal(t, "TCP", d.Protocol)
 	assert.Equal(t, 53472, d.SrcPort)
 	assert.Equal(t, 8088, d.DstPort)
-	assert.Contains(t, d.TextData, "POST /ws/v1/cluster/apps/new-application")
-	assert.Contains(t, d.TextData, "\n\n") // tail LF of HTTP request
+	assert.Contains(t, d.TextPayload, "POST /ws/v1/cluster/apps/new-application")
+	assert.Contains(t, d.TextPayload, "\n\n") // tail LF of HTTP request
+	assert.Equal(t, 0, len(d.RawPayload))
+}
+
+func TestJsonDumpNoText(t *testing.T) {
+	payload := genSamplePacketData()
+	pkt := vxcap.NewPacketData(payload)
+	buf := new(bytes.Buffer)
+
+	dumper := vxcap.NewJSONPacketDumper(vxcap.DumperArguments{
+		Format:               "json",
+		Target:               "packet",
+		EnableJSONRawPayload: true,
+	})
+	err := vxcap.JSONPacketDumperDump(dumper, vxcap.ToPacketDataSlice(pkt), buf)
+	require.NoError(t, err)
+
+	var d vxcap.JSONRecord
+	err = json.Unmarshal(buf.Bytes(), &d)
+	require.NoError(t, err)
+
+	assert.NotContains(t, d.TextPayload, "POST /ws/v1/cluster/apps/new-application")
+	assert.NotEqual(t, 0, len(d.RawPayload))
 }

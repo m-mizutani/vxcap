@@ -35,11 +35,11 @@ func main() {
 		},
 		cli.StringFlag{
 			Name: "dumper, d", Value: "pcap",
-			Destination: &args.DumperKey.Format,
+			Destination: &args.DumperArgs.Format,
 		},
 		cli.StringFlag{
 			Name: "target, t", Value: "packet",
-			Destination: &args.DumperKey.Target,
+			Destination: &args.DumperArgs.Target,
 		},
 		cli.IntFlag{
 			Name: "port, p", Value: vxcap.DefaultVxlanPort,

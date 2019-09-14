@@ -8,7 +8,7 @@ import (
 )
 
 func TestEmitterNoName(t *testing.T) {
-	var args vxcap.EmitterArgument
+	var args vxcap.EmitterArguments
 	emitter, err := vxcap.NewEmitter(args)
 	assert.Error(t, err)
 	assert.Nil(t, emitter)

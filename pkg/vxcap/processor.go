@@ -11,8 +11,8 @@ type PacketProcessor struct {
 
 // PacketProcessorArgument is argument to construct new PacketProcessor
 type PacketProcessorArgument struct {
-	DumperKey   dumperKey
-	EmitterArgs emitterArgument
+	DumperArgs  DumperArguments
+	EmitterArgs EmitterArguments
 }
 
 type emitterModeKey struct {
@@ -38,8 +38,8 @@ func NewPacketProcessor(args PacketProcessorArgument) (*PacketProcessor, error) 
 	// Choose emitter mode
 	modeKey := emitterModeKey{
 		Emitter: args.EmitterArgs.Key.Name,
-		Format:  args.DumperKey.Format,
-		Target:  args.DumperKey.Target,
+		Format:  args.DumperArgs.Format,
+		Target:  args.DumperArgs.Target,
 	}
 
 	params, ok := emitterModeMap[modeKey]
@@ -50,7 +50,7 @@ func NewPacketProcessor(args PacketProcessorArgument) (*PacketProcessor, error) 
 	args.EmitterArgs.Extension = params.Extension
 
 	// construct dumper and emitter
-	dumper, err := getDumper(args.DumperKey)
+	dumper, err := newDumper(args.DumperArgs)
 	if err != nil {
 		return nil, err
 	}
