@@ -11,6 +11,7 @@ var (
 	NewDumper     = newDumper
 
 	NewJSONPacketDumper = newJSONPacketDumper
+	NewPcapDumper       = newPcapDumper
 )
 
 type PacketData packetData
@@ -21,9 +22,27 @@ func ToPacketDataSlice(pkt *packetData) []*packetData {
 }
 
 func JSONPacketDumperDump(d dumper, packets []*packetData, w io.Writer) error {
-	return d.(*jsonPacketDumper).dump(packets, w)
+	if err := d.(*jsonPacketDumper).open(w); err != nil {
+		return err
+	}
+	if err := d.(*jsonPacketDumper).dump(packets, w); err != nil {
+		return err
+	}
+	if err := d.(*jsonPacketDumper).close(w); err != nil {
+		return err
+	}
+	return nil
 }
 
 func PcapDumperDump(d dumper, packets []*packetData, w io.Writer) error {
-	return d.(*pcapDumper).dump(packets, w)
+	if err := d.(*pcapDumper).open(w); err != nil {
+		return err
+	}
+	if err := d.(*pcapDumper).dump(packets, w); err != nil {
+		return err
+	}
+	if err := d.(*pcapDumper).close(w); err != nil {
+		return err
+	}
+	return nil
 }

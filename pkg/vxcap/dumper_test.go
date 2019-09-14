@@ -12,9 +12,9 @@ import (
 	"testing"
 )
 
-var vxcapTestFS = os.Getenv("VXCAP_TEST_FS")
+// var vxcapTestFS = os.Getenv("VXCAP_TEST_FS")
 
-// var vxcapTestFS = "on"
+var vxcapTestFS = "on"
 
 func genSamplePacketData() []byte {
 	var payload []byte
@@ -36,7 +36,7 @@ func TestPcapDumpFileSystem(t *testing.T) {
 	w, err := os.Create("test_dumppcap_fs.pcap")
 	require.NoError(t, err)
 
-	dumper := vxcap.NewJSONPacketDumper(vxcap.DumperArguments{
+	dumper := vxcap.NewPcapDumper(vxcap.DumperArguments{
 		Format: "pcap",
 		Target: "packet",
 	})
@@ -59,7 +59,7 @@ func TestJsonDumpFileSystem(t *testing.T) {
 		Format: "pcap",
 		Target: "packet",
 	})
-	err = vxcap.PcapDumperDump(dumper, vxcap.ToPacketDataSlice(pkt), w)
+	err = vxcap.JSONPacketDumperDump(dumper, vxcap.ToPacketDataSlice(pkt), w)
 	require.NoError(t, err)
 }
 
@@ -87,7 +87,7 @@ func TestJsonDumpBuffer(t *testing.T) {
 	assert.Equal(t, 53472, d.SrcPort)
 	assert.Equal(t, 8088, d.DstPort)
 	assert.Contains(t, d.TextPayload, "POST /ws/v1/cluster/apps/new-application")
-	assert.Contains(t, d.TextPayload, "\n\n") // tail LF of HTTP request
+	assert.Contains(t, d.TextPayload, "\r\n\r\n") // tail LF of HTTP request
 	assert.Equal(t, 0, len(d.RawPayload))
 }
 
