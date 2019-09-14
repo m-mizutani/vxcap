@@ -37,7 +37,7 @@ var emitterModeMap = map[emitterModeKey]emitterParams{
 func NewPacketProcessor(args PacketProcessorArgument) (*PacketProcessor, error) {
 	// Choose emitter mode
 	modeKey := emitterModeKey{
-		Emitter: args.EmitterArgs.Key.Name,
+		Emitter: args.EmitterArgs.Name,
 		Format:  args.DumperArgs.Format,
 		Target:  args.DumperArgs.Target,
 	}
@@ -46,8 +46,8 @@ func NewPacketProcessor(args PacketProcessorArgument) (*PacketProcessor, error) 
 	if !ok {
 		return nil, fmt.Errorf("The settings for emitter and dumper are not allowed: %v", modeKey)
 	}
-	args.EmitterArgs.Key.Mode = params.Mode
-	args.EmitterArgs.Extension = params.Extension
+	args.EmitterArgs.mode = params.Mode
+	args.EmitterArgs.extension = params.Extension
 
 	// construct dumper and emitter
 	dumper, err := newDumper(args.DumperArgs)
@@ -55,7 +55,7 @@ func NewPacketProcessor(args PacketProcessorArgument) (*PacketProcessor, error) 
 		return nil, err
 	}
 
-	args.EmitterArgs.Dumper = dumper
+	args.EmitterArgs.dumper = dumper
 	emitter, err := newEmitter(args.EmitterArgs)
 	if err != nil {
 		return nil, err
@@ -72,6 +72,15 @@ func NewPacketProcessor(args PacketProcessorArgument) (*PacketProcessor, error) 
 // Put method input a packet to emitter.
 func (x *PacketProcessor) Put(pkt *packetData) error {
 	if err := x.emitter.emit([]*packetData{pkt}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Shutdown starts closing process of emitter.
+func (x *PacketProcessor) Shutdown() error {
+	if err := x.emitter.close(); err != nil {
 		return err
 	}
 

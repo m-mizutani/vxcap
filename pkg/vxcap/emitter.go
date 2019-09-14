@@ -1,7 +1,6 @@
 package vxcap
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -27,13 +26,15 @@ type emitterKey struct {
 	Name string
 	Mode string // batch or stream
 }
-type emitterConstructor func(EmitterArguments) recordEmitter
+type emitterConstructor func(EmitterArguments) (recordEmitter, error)
 
 // EmitterArguments is for construction of emitter
 type EmitterArguments struct {
-	Key       emitterKey
-	Dumper    dumper
-	Extension string
+	Name string
+	mode string // batch or stream, the field should be set by PacketProcessor
+
+	dumper    dumper
+	extension string
 
 	// For fsEmitter
 	FsFileName   string
@@ -44,9 +45,14 @@ type EmitterArguments struct {
 	AwsRegion       string
 	AwsS3Bucket     string
 	AwsS3Prefix     string
-	AwsAddTimeKey   bool
+	AwsS3AddTimeKey bool
 	AwsS3FlushCount int
 }
+
+const (
+	// DefaultAwsS3FlushCount is limit of data buffer for S3 emitter.
+	DefaultAwsS3FlushCount = 4096
+)
 
 type baseEmitter struct {
 	Dumper dumper
@@ -67,18 +73,25 @@ func newEmitter(args EmitterArguments) (recordEmitter, error) {
 		{Name: "fs", Mode: "stream"}: newFsStreamEmitter,
 	}
 
-	constructor, ok := emitterMap[args.Key]
+	key := emitterKey{
+		Name: args.Name,
+		Mode: args.mode,
+	}
+	constructor, ok := emitterMap[key]
 	if !ok {
-		return nil, fmt.Errorf("The pair is not supported: %v", args.Key)
+		return nil, fmt.Errorf("The pair is not supported: %v", key)
 	}
 
-	emitter := constructor(args)
+	emitter, err := constructor(args)
+	if err != nil {
+		return nil, err
+	}
 
-	if args.Dumper == nil {
+	if args.dumper == nil {
 		return nil, fmt.Errorf("No Dumper. Dumper is required for new emitter")
 	}
 
-	emitter.setDumper(args.Dumper)
+	emitter.setDumper(args.dumper)
 	return emitter, nil
 }
 
@@ -87,9 +100,9 @@ type fsBatchEmitter struct {
 	Argument EmitterArguments
 }
 
-func newFsBatchEmitter(args EmitterArguments) recordEmitter {
+func newFsBatchEmitter(args EmitterArguments) (recordEmitter, error) {
 	e := fsBatchEmitter{Argument: args}
-	return &e
+	return &e, nil
 }
 
 func (x *fsBatchEmitter) emit(pkt []*packetData) error {
@@ -120,18 +133,32 @@ func (x *fsBatchEmitter) close() error {
 type fsStreamEmitter struct {
 	baseEmitter
 	Argument    EmitterArguments
+	DirPath     string
+	FileName    string
 	RotateLimit int
 	fd          *os.File
 }
 
-func newFsStreamEmitter(args EmitterArguments) recordEmitter {
-	e := fsStreamEmitter{Argument: args}
-	return &e
+func newFsStreamEmitter(args EmitterArguments) (recordEmitter, error) {
+	emitter := fsStreamEmitter{
+		Argument: args,
+		DirPath:  ".",
+		FileName: "dump." + args.extension,
+	}
+
+	if args.FsDirPath != "" {
+		emitter.DirPath = args.FsDirPath
+	}
+	if args.FsFileName != "" {
+		emitter.FileName = args.FsFileName
+	}
+
+	return &emitter, nil
 }
 
 func (x *fsStreamEmitter) emit(packets []*packetData) error {
 	if x.fd == nil {
-		fd, err := os.Create(filepath.Join(x.Argument.FsDirPath, x.Argument.FsFileName))
+		fd, err := os.Create(filepath.Join(x.DirPath, x.FileName))
 		if err != nil {
 			return errors.Wrap(err, "Fail to create a dump file for emitter")
 		}
@@ -161,17 +188,34 @@ func (x *fsStreamEmitter) close() error {
 
 type s3StreamEmitter struct {
 	baseEmitter
-	Argument  EmitterArguments
-	pktBuffer []*packetData
+	Argument   EmitterArguments
+	pktBuffer  []*packetData
+	flushCount int
 }
 
-func newS3StreamEmitter(args EmitterArguments) recordEmitter {
-	e := s3StreamEmitter{Argument: args}
-	return &e
+func newS3StreamEmitter(args EmitterArguments) (recordEmitter, error) {
+	if args.AwsRegion == "" {
+		return nil, fmt.Errorf("AwsRegion is not set for S3 emitter")
+	}
+	if args.AwsS3Bucket == "" {
+		return nil, fmt.Errorf("AwsS3Bucket is not set for S3 emitter")
+	}
+
+	emitter := s3StreamEmitter{
+		Argument:   args,
+		flushCount: DefaultAwsS3FlushCount,
+	}
+
+	if args.AwsS3FlushCount > 0 {
+		emitter.flushCount = args.AwsS3FlushCount
+	}
+	return &emitter, nil
 }
 
 func (x *s3StreamEmitter) flush() error {
-	var buf bytes.Buffer
+	if len(x.pktBuffer) == 0 {
+		return nil
+	}
 
 	reader, writer := io.Pipe()
 	errCh := make(chan error)
@@ -180,15 +224,17 @@ func (x *s3StreamEmitter) flush() error {
 		defer writer.Close()
 		defer close(errCh)
 
-		if err := x.Dumper.open(&buf); err != nil {
+		if err := x.Dumper.open(writer); err != nil {
 			errCh <- errors.Wrap(err, "Fail to open dumper for S3 object")
 		}
-		if err := x.Dumper.dump(x.pktBuffer, &buf); err != nil {
+		if err := x.Dumper.dump(x.pktBuffer, writer); err != nil {
 			errCh <- errors.Wrap(err, "Fail to dump packets for S3 object")
 		}
-		if err := x.Dumper.close(&buf); err != nil {
+		if err := x.Dumper.close(writer); err != nil {
 			errCh <- errors.Wrap(err, "Fail to close dumper for S3 object")
 		}
+
+		x.pktBuffer = []*packetData{}
 	}()
 
 	ssn := session.Must(session.NewSession(&aws.Config{
@@ -197,12 +243,12 @@ func (x *s3StreamEmitter) flush() error {
 
 	s3Key := x.Argument.AwsS3Prefix
 	now := time.Now().UTC()
-	if x.Argument.AwsAddTimeKey {
+	if x.Argument.AwsS3AddTimeKey {
 		s3Key += now.Format("2006/01/02/15/")
 	}
 	s3Key += now.Format("20160102_150405_") +
-		strings.Replace(uuid.New().String(), "-", "_", -1) + "." +
-		x.Argument.Extension
+		strings.Replace(uuid.New().String(), "-", "", -1) + "." +
+		x.Argument.extension
 
 	uploader := s3manager.NewUploader(ssn)
 	resp, err := uploader.Upload(&s3manager.UploadInput{

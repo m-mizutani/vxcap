@@ -31,7 +31,7 @@ func main() {
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name: "emitter, e", Value: "fs",
-			Destination: &args.EmitterArgs.Key.Name,
+			Destination: &args.EmitterArgs.Name,
 		},
 		cli.StringFlag{
 			Name: "dumper, d", Value: "pcap",
