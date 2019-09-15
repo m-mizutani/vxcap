@@ -253,6 +253,9 @@ func TestProcessorJsonFirehoseOutput(t *testing.T) {
 	err = json.Unmarshal(mock.Input[0].Records[0].Data, &jdata)
 	require.NoError(t, err)
 	assert.Equal(t, "167.71.184.66", jdata.SrcAddr)
+
+	// Check for no newline code.
+	assert.Equal(t, 0, strings.Count(string(mock.Input[0].Records[0].Data), "\n"))
 }
 
 func TestProcessorJsonFirehoseFlushSize(t *testing.T) {
