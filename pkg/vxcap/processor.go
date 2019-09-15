@@ -3,6 +3,8 @@ package vxcap
 import (
 	"fmt"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 // Processor is interface of packet processing main feature.
@@ -55,6 +57,11 @@ func NewPacketProcessor(args PacketProcessorArgument) (*PacketProcessor, error) 
 		Format:  args.DumperArgs.Format,
 		Target:  args.DumperArgs.Target,
 	}
+	Logger.WithFields(logrus.Fields{
+		"emitter": args.EmitterArgs.Name,
+		"format":  args.DumperArgs.Format,
+		"target":  args.DumperArgs.Target,
+	}).Info("Configure PacketProcessor")
 
 	params, ok := emitterModeMap[modeKey]
 	if !ok {
@@ -62,9 +69,18 @@ func NewPacketProcessor(args PacketProcessorArgument) (*PacketProcessor, error) 
 	}
 	args.EmitterArgs.mode = params.Mode
 	args.EmitterArgs.extension = params.Extension
+	Logger.WithFields(logrus.Fields{
+		"emitMode":        params.Mode,
+		"extention":       params.Extension,
+		"overwriteForamt": params.OverwriteFormat,
+	}).Debug("Got parameters regarding emitter")
 
 	// Overwrite dumper foramt if required.
 	if params.OverwriteFormat != "" {
+		Logger.WithFields(logrus.Fields{
+			"before": args.DumperArgs.Format,
+			"after":  params.OverwriteFormat,
+		}).Debug("Format will be overwritten")
 		args.DumperArgs.Format = params.OverwriteFormat
 	}
 	// construct dumper and emitter

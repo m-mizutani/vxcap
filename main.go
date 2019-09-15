@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/m-mizutani/vxcap/pkg/vxcap"
-
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -48,7 +47,7 @@ func main() {
 			Destination: &args.DumperArgs.Format,
 		},
 		cli.StringFlag{
-			Name: "log-level", Value: "info",
+			Name: "log-level, l", Value: "info",
 			Usage:       "Log level [trace,debug,info,warn,error]",
 			Destination: &logLevel,
 		},
@@ -149,6 +148,11 @@ func main() {
 			return fmt.Errorf("Invalid log level: %s", logLevel)
 		}
 		vxcap.Logger.SetLevel(level)
+
+		vxcap.Logger.WithFields(logrus.Fields{
+			"PacketProcessorArgument": args,
+			"logLevel":                logLevel,
+		}).Debug("Given options")
 
 		proc, err := vxcap.NewPacketProcessor(args)
 		if err != nil {
