@@ -33,16 +33,17 @@ type emitterModeKey struct {
 	Target  string
 }
 type emitterParams struct {
-	Mode      string
-	Extension string
+	Mode            string
+	Extension       string
+	OverwriteFormat string
 }
 
 var emitterModeMap = map[emitterModeKey]emitterParams{
-	{Emitter: "fs", Format: "pcap", Target: "packet"}:       {"stream", "pcap"},
-	{Emitter: "fs", Format: "json", Target: "packet"}:       {"stream", "json"},
-	{Emitter: "s3", Format: "pcap", Target: "packet"}:       {"stream", "pcap"},
-	{Emitter: "s3", Format: "json", Target: "packet"}:       {"stream", "json"},
-	{Emitter: "firehose", Format: "json", Target: "packet"}: {"stream", "json"},
+	{Emitter: "fs", Format: "pcap", Target: "packet"}:       {"stream", "pcap", ""},
+	{Emitter: "fs", Format: "json", Target: "packet"}:       {"stream", "json", "ndjson"},
+	{Emitter: "s3", Format: "pcap", Target: "packet"}:       {"stream", "pcap", ""},
+	{Emitter: "s3", Format: "json", Target: "packet"}:       {"stream", "json", "ndjson"},
+	{Emitter: "firehose", Format: "json", Target: "packet"}: {"stream", "json", ""},
 }
 
 // NewPacketProcessor is constructor of PacketProcessor. Not only creating instance
@@ -62,6 +63,10 @@ func NewPacketProcessor(args PacketProcessorArgument) (*PacketProcessor, error) 
 	args.EmitterArgs.mode = params.Mode
 	args.EmitterArgs.extension = params.Extension
 
+	// Overwrite dumper foramt if required.
+	if params.OverwriteFormat != "" {
+		args.DumperArgs.Format = params.OverwriteFormat
+	}
 	// construct dumper and emitter
 	dumper, err := newDumper(args.DumperArgs)
 	if err != nil {
