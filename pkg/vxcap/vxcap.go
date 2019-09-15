@@ -11,7 +11,7 @@ import (
 )
 
 // Logger is logging interface of the pacakge. Basically It's disabled by default.
-// But it can be enabled by changing log level by SetLevel for debugging.
+// But it can be enabled by changing log level via SetLevel() for debugging.
 var Logger = logrus.New()
 
 func init() {
