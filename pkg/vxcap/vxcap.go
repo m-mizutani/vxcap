@@ -35,6 +35,10 @@ func New() *VXCap {
 
 // Start invokes UDP listener for VXLAN and forward captured packets to processor.
 func (x *VXCap) Start(proc Processor) error {
+	if err := proc.Setup(); err != nil {
+		return err
+	}
+
 	// Setup channels
 	queueCh := listenVXLAN(x.RecvPort, x.QueueSize)
 
