@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// Processor is interface of packet processing main feature.
 type Processor interface {
 	Setup() error
 	Put(pkt *packetData) error
