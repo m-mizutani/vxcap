@@ -80,11 +80,15 @@ func main() {
 			Usage:       "Output directory for FS emitter",
 			Destination: &args.EmitterArgs.FsDirPath,
 		},
-		cli.IntFlag{
-			Name: "fs-rotate-size", Value: 0, // Not rotate
-			Usage:       "Threshold size of file rotation for FS emitter",
-			Destination: &args.EmitterArgs.FsRotateSize,
-		},
+		/*
+			TODO: Implement rotation mechanism
+			cli.IntFlag{
+				Name: "fs-rotate-size", Value: 0, // Not rotate
+				Usage:       "Threshold size of file rotation for FS emitter",
+				Destination: &args.EmitterArgs.FsRotateSize,
+			},
+		*/
+
 		// Options for AWS emitter
 		cli.StringFlag{
 			Name:        "aws-region",
