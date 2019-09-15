@@ -1,6 +1,16 @@
 package vxcap
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
+
+type Processor interface {
+	Setup() error
+	Put(pkt *packetData) error
+	Tick(now time.Time) error
+	Shutdown() error
+}
 
 // PacketProcessor controls both of dumper (log enconder) and emitter (log forwarder).
 // And it works as interface of log processing by Put() function.
@@ -91,6 +101,11 @@ func (x *PacketProcessor) Put(pkt *packetData) error {
 		return err
 	}
 
+	return nil
+}
+
+// Tick involves timer handler to manage timeout process.
+func (x *PacketProcessor) Tick(now time.Time) error {
 	return nil
 }
 

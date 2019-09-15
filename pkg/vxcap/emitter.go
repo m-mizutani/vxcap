@@ -22,6 +22,7 @@ type recordEmitter interface {
 	setup() error
 	emit([]*packetData) error
 	teardown() error
+	tick(t time.Time) error
 	setDumper(dumper)
 	getDumper() dumper
 }
@@ -71,16 +72,11 @@ type baseEmitter struct {
 	Dumper dumper
 }
 
-func (x *baseEmitter) setDumper(f dumper) {
-	x.Dumper = f
-}
-
-func (x *baseEmitter) getDumper() dumper {
-	return x.Dumper
-}
-
-func (x *baseEmitter) setup() error    { return nil }
-func (x *baseEmitter) teardown() error { return nil }
+func (x *baseEmitter) setDumper(f dumper)       { x.Dumper = f }
+func (x *baseEmitter) getDumper() dumper        { return x.Dumper }
+func (x *baseEmitter) setup() error             { return nil }
+func (x *baseEmitter) teardown() error          { return nil }
+func (x *baseEmitter) tick(now time.Time) error { return nil }
 
 func newEmitter(args EmitterArguments) (recordEmitter, error) {
 	emitterMap := map[emitterKey]emitterConstructor{

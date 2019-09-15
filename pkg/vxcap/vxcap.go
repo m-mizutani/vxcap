@@ -1,6 +1,11 @@
 package vxcap
 
 import (
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -28,19 +33,38 @@ func New() *VXCap {
 	return &cap
 }
 
-func init() {
-
-}
-
 // Start invokes UDP listener for VXLAN and forward captured packets to processor.
-func (x *VXCap) Start(proc *PacketProcessor) error {
-	for q := range listenVXLAN(x.RecvPort, x.QueueSize) {
-		if q.Err != nil {
-			return errors.Wrap(q.Err, "Fail to receive UDP")
-		}
+func (x *VXCap) Start(proc Processor) error {
+	// Setup channels
+	queueCh := listenVXLAN(x.RecvPort, x.QueueSize)
+	tickerCh := time.Tick(time.Second)
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, syscall.SIGTERM)
+	defer signal.Stop(signalCh)
 
-		if err := proc.Put(q.Pkt); err != nil {
-			return errors.Wrap(err, "Fail to handle packet")
+MainLoop:
+	for {
+		select {
+		case q := <-queueCh:
+			if q.Err != nil {
+				return errors.Wrap(q.Err, "Fail to receive UDP")
+			}
+
+			if err := proc.Put(q.Pkt); err != nil {
+				return errors.Wrap(err, "Fail to handle packet")
+			}
+
+		case t := <-tickerCh:
+			if err := proc.Tick(t); err != nil {
+				return errors.Wrap(err, "Fail in tick process")
+			}
+
+		case s := <-signalCh:
+			Logger.WithField("signal", s).Warn("Caught signal (should be SIGTERM")
+			if err := proc.Shutdown(); err != nil {
+				return errors.Wrap(err, "Fail in shutdown process")
+			}
+			break MainLoop
 		}
 	}
 
