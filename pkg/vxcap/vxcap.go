@@ -37,7 +37,11 @@ func New() *VXCap {
 func (x *VXCap) Start(proc Processor) error {
 	// Setup channels
 	queueCh := listenVXLAN(x.RecvPort, x.QueueSize)
-	tickerCh := time.Tick(time.Second)
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	tickerCh := ticker.C
+
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGTERM)
 	defer signal.Stop(signalCh)

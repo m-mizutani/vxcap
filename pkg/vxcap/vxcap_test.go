@@ -36,7 +36,8 @@ func TestVxcapTimerAndSignal(t *testing.T) {
 
 		proc, err := os.FindProcess(os.Getpid())
 		require.NoError(t, err)
-		proc.Signal(syscall.SIGTERM)
+		err = proc.Signal(syscall.SIGTERM)
+		require.NoError(t, err)
 	}()
 
 	err := cap.Start(&dummy)
