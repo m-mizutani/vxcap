@@ -84,6 +84,12 @@ func NewPacketProcessor(args PacketProcessorArgument) (*PacketProcessor, error) 
 
 // Setup must be invoked before calling Put()
 func (x *PacketProcessor) Setup() error {
+	if x.emitter == nil {
+		Logger.Warn("Emitter is not set and the processor will be fail when calling Put(). " +
+			"This is allowed for only debugging and testing.")
+		return nil
+	}
+
 	if err := x.emitter.setup(); err != nil {
 		return err
 	}
