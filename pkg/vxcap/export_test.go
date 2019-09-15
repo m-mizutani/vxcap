@@ -1,7 +1,11 @@
 //nolint
 package vxcap
 
-import "io"
+import (
+	"io"
+
+	"github.com/aws/aws-sdk-go/service/firehose"
+)
 
 var (
 	ParseVXLAN    = parseVXLAN
@@ -45,4 +49,21 @@ func PcapDumperDump(d dumper, packets []*packetData, w io.Writer) error {
 		return err
 	}
 	return nil
+}
+
+// -------------------------
+// Firehose client mock
+type FirehoseTestClient struct {
+	Input []*firehose.PutRecordBatchInput
+}
+
+func (x *FirehoseTestClient) PutRecordBatch(input *firehose.PutRecordBatchInput) (*firehose.PutRecordBatchOutput, error) {
+	x.Input = append(x.Input, input)
+	return &firehose.PutRecordBatchOutput{}, nil
+}
+
+func ReplaceNewFirehoseClient(client vxcapFirehoseClient) {
+	newFirehoseClient = func(string) vxcapFirehoseClient {
+		return client
+	}
 }

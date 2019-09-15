@@ -222,3 +222,66 @@ func TestProcessorS3ConfigError(t *testing.T) {
 	})
 	assert.NoError(t, err) // AwsS3Prefix is optional
 }
+
+func TestProcessorJsonFirehoseOutput(t *testing.T) {
+	pkt := vxcap.NewPacketData(genSamplePacketData())
+	mock := vxcap.FirehoseTestClient{}
+	vxcap.ReplaceNewFirehoseClient(&mock)
+
+	proc, err := vxcap.NewPacketProcessor(vxcap.PacketProcessorArgument{
+		DumperArgs: vxcap.DumperArguments{
+			Format: "json",
+			Target: "packet",
+		},
+		EmitterArgs: vxcap.EmitterArguments{
+			Name:            "firehose",
+			AwsRegion:       "somewhere",
+			AwsFirehoseName: "heretics",
+		},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, proc.Setup())
+	for i := 0; i < 5; i++ {
+		require.NoError(t, proc.Put(pkt))
+	}
+	require.NoError(t, proc.Shutdown())
+	assert.Equal(t, 1, len(mock.Input))
+	assert.Equal(t, 5, len(mock.Input[0].Records))
+	assert.Equal(t, "heretics", *mock.Input[0].DeliveryStreamName)
+	var jdata vxcap.JSONRecord
+	err = json.Unmarshal(mock.Input[0].Records[0].Data, &jdata)
+	require.NoError(t, err)
+	assert.Equal(t, "167.71.184.66", jdata.SrcAddr)
+}
+
+func TestProcessorJsonFirehoseFlushSize(t *testing.T) {
+	pkt := vxcap.NewPacketData(genSamplePacketData())
+	mock := vxcap.FirehoseTestClient{}
+	vxcap.ReplaceNewFirehoseClient(&mock)
+
+	proc, err := vxcap.NewPacketProcessor(vxcap.PacketProcessorArgument{
+		DumperArgs: vxcap.DumperArguments{
+			Format:                "json",
+			Target:                "packet",
+			EnableJSONTextPayload: true,
+		},
+		EmitterArgs: vxcap.EmitterArguments{
+			Name:                 "firehose",
+			AwsRegion:            "somewhere",
+			AwsFirehoseName:      "heretics",
+			AwsFirehoseFlushSize: 500,
+		},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, proc.Setup())
+	for i := 0; i < 5; i++ {
+		require.NoError(t, proc.Put(pkt))
+	}
+	require.NoError(t, proc.Shutdown())
+	assert.Equal(t, 3, len(mock.Input))
+	assert.Equal(t, 2, len(mock.Input[0].Records))
+	assert.Equal(t, 2, len(mock.Input[1].Records))
+	assert.Equal(t, 1, len(mock.Input[2].Records))
+}

@@ -299,10 +299,24 @@ func (x *s3StreamEmitter) teardown() error {
 	return nil
 }
 
+type vxcapFirehoseClient interface {
+	PutRecordBatch(*firehose.PutRecordBatchInput) (*firehose.PutRecordBatchOutput, error)
+}
+
+var newFirehoseClient = func(awsRegion string) vxcapFirehoseClient {
+	ssn := session.Must(session.NewSession(&aws.Config{
+		Region: aws.String(awsRegion),
+	}))
+
+	client := firehose.New(ssn)
+
+	return client
+}
+
 type firehoseEmitter struct {
 	baseEmitter
 	Argument       EmitterArguments
-	firehoseClient *firehose.Firehose
+	firehoseClient vxcapFirehoseClient
 	pktBuffer      [][]byte
 	pktBufferSize  int
 	flushSize      int
@@ -312,6 +326,10 @@ func newFirehoseEmitter(args EmitterArguments) (recordEmitter, error) {
 	e := firehoseEmitter{
 		Argument:  args,
 		flushSize: DefaultAwsFirehoseFlushSize,
+	}
+
+	if args.AwsFirehoseFlushSize != 0 {
+		e.flushSize = args.AwsFirehoseFlushSize
 	}
 
 	return &e, nil
@@ -332,7 +350,7 @@ func (x *firehoseEmitter) flush() error {
 
 	resp, err := x.firehoseClient.PutRecordBatch(recordsBatchInput)
 	if err != nil {
-		return errors.Wrap(err, "Fail")
+		return errors.Wrap(err, "Fail to put firehose records")
 	}
 
 	Logger.WithField("resp", resp).Debug("Done Firehose PutRecordBatch")
@@ -344,12 +362,7 @@ func (x *firehoseEmitter) flush() error {
 }
 
 func (x *firehoseEmitter) setup() error {
-	ssn := session.Must(session.NewSession(&aws.Config{
-		Region: aws.String(x.Argument.AwsRegion),
-	}))
-
-	x.firehoseClient = firehose.New(ssn)
-
+	x.firehoseClient = newFirehoseClient(x.Argument.AwsRegion)
 	return nil
 }
 
