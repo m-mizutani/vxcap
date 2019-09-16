@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -284,4 +285,37 @@ func TestProcessorJsonFirehoseFlushSize(t *testing.T) {
 	assert.Equal(t, 2, len(mock.Input[0].Records))
 	assert.Equal(t, 2, len(mock.Input[1].Records))
 	assert.Equal(t, 1, len(mock.Input[2].Records))
+}
+
+func TestProcessorJsonFirehoseFlushInterval(t *testing.T) {
+	pkt := vxcap.NewPacketData(genSamplePacketData())
+	mock := vxcap.FirehoseTestClient{}
+	vxcap.ReplaceNewFirehoseClient(&mock)
+
+	proc, err := vxcap.NewPacketProcessor(vxcap.PacketProcessorArgument{
+		DumperArgs: vxcap.DumperArguments{
+			Format: "json",
+			Target: "packet",
+		},
+		EmitterArgs: vxcap.EmitterArguments{
+			Name:                     "firehose",
+			AwsRegion:                "somewhere",
+			AwsFirehoseName:          "heretics",
+			AwsFirehoseFlushInterval: 1,
+		},
+	})
+	require.NoError(t, err)
+
+	now := time.Now()
+	require.NoError(t, proc.Setup())
+	for i := 0; i < 5; i++ {
+		require.NoError(t, proc.Put(pkt))
+	}
+	feature := now.Add(3 * time.Second)
+	proc.Tick(feature)
+
+	// Emitter must flushes record after 3 second even if processer have not shutdown.
+	assert.Equal(t, 1, len(mock.Input))
+	assert.Equal(t, 5, len(mock.Input[0].Records))
+	require.NoError(t, proc.Shutdown())
 }

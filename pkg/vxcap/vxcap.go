@@ -1,6 +1,7 @@
 package vxcap
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -63,6 +64,7 @@ MainLoop:
 			}
 
 		case t := <-tickerCh:
+			fmt.Println("ticker")
 			if err := proc.Tick(t); err != nil {
 				return errors.Wrap(err, "Fail in tick process")
 			}

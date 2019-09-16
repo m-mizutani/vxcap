@@ -50,22 +50,28 @@ type EmitterArguments struct {
 	AwsRegion string
 
 	// For s3Emitter
-	AwsS3Bucket     string
-	AwsS3Prefix     string
-	AwsS3AddTimeKey bool
-	AwsS3FlushCount int
+	AwsS3Bucket        string
+	AwsS3Prefix        string
+	AwsS3AddTimeKey    bool
+	AwsS3FlushCount    int
+	AwsS3FlushInterval int
 
 	// For firehoseEmitter
-	AwsFirehoseName      string
-	AwsFirehoseFlushSize int
+	AwsFirehoseName          string
+	AwsFirehoseFlushSize     int
+	AwsFirehoseFlushInterval int
 }
 
 const (
 	// DefaultAwsS3FlushCount is limit of data buffer for S3 emitter.
 	DefaultAwsS3FlushCount = 4096
+	// DefaultAwsS3FlushInterval is seconds of interval to flush data for S3 emitter
+	DefaultAwsS3FlushInterval = 300
 
 	// DefaultAwsFirehoseFlushSize is threshold of flush to firehose.
 	DefaultAwsFirehoseFlushSize = 2 * 1024 * 1024 // 2MB
+	// DefaultAwsFIrehoseFlushInterval is seconds of interval to flush data for Firehose emitter
+	DefaultAwsFIrehoseFlushInterval = 300
 )
 
 type baseEmitter struct {
@@ -197,9 +203,11 @@ func (x *fsStreamEmitter) teardown() error {
 
 type s3StreamEmitter struct {
 	baseEmitter
-	Argument   EmitterArguments
-	pktBuffer  []*packetData
-	flushCount int
+	Argument      EmitterArguments
+	pktBuffer     []*packetData
+	flushCount    int
+	flushInterval int
+	lastFlush     time.Time
 }
 
 func newS3StreamEmitter(args EmitterArguments) (recordEmitter, error) {
@@ -211,17 +219,23 @@ func newS3StreamEmitter(args EmitterArguments) (recordEmitter, error) {
 	}
 
 	emitter := s3StreamEmitter{
-		Argument:   args,
-		flushCount: DefaultAwsS3FlushCount,
+		Argument:      args,
+		flushCount:    DefaultAwsS3FlushCount,
+		flushInterval: DefaultAwsS3FlushInterval,
+		lastFlush:     time.Now(),
 	}
 
 	if args.AwsS3FlushCount > 0 {
 		emitter.flushCount = args.AwsS3FlushCount
 	}
+	if args.AwsS3FlushInterval > 0 {
+		emitter.flushInterval = args.AwsS3FlushInterval
+	}
 	return &emitter, nil
 }
 
 func (x *s3StreamEmitter) flush() error {
+	x.lastFlush = time.Now()
 	if len(x.pktBuffer) == 0 {
 		return nil
 	}
@@ -299,6 +313,15 @@ func (x *s3StreamEmitter) teardown() error {
 	return nil
 }
 
+func (x *s3StreamEmitter) tick(now time.Time) error {
+	if now.Sub(x.lastFlush) > time.Second*time.Duration(x.flushInterval) {
+		if err := x.flush(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type vxcapFirehoseClient interface {
 	PutRecordBatch(*firehose.PutRecordBatchInput) (*firehose.PutRecordBatchOutput, error)
 }
@@ -320,22 +343,34 @@ type firehoseEmitter struct {
 	pktBuffer      [][]byte
 	pktBufferSize  int
 	flushSize      int
+	flushInterval  int
+	lastFlush      time.Time
 }
 
 func newFirehoseEmitter(args EmitterArguments) (recordEmitter, error) {
 	e := firehoseEmitter{
-		Argument:  args,
-		flushSize: DefaultAwsFirehoseFlushSize,
+		Argument:      args,
+		flushSize:     DefaultAwsFirehoseFlushSize,
+		flushInterval: DefaultAwsFIrehoseFlushInterval,
+		lastFlush:     time.Now(),
 	}
 
-	if args.AwsFirehoseFlushSize != 0 {
+	if args.AwsFirehoseFlushSize > 0 {
 		e.flushSize = args.AwsFirehoseFlushSize
+	}
+	if args.AwsFirehoseFlushInterval > 0 {
+		e.flushInterval = args.AwsFirehoseFlushInterval
 	}
 
 	return &e, nil
 }
 
 func (x *firehoseEmitter) flush() error {
+	x.lastFlush = time.Now()
+	if len(x.pktBuffer) == 0 {
+		return nil
+	}
+
 	recordsBatchInput := &firehose.PutRecordBatchInput{}
 	recordsBatchInput = recordsBatchInput.SetDeliveryStreamName(x.Argument.AwsFirehoseName)
 
@@ -392,5 +427,15 @@ func (x *firehoseEmitter) teardown() error {
 		return err
 	}
 
+	return nil
+}
+
+func (x *firehoseEmitter) tick(now time.Time) error {
+	fmt.Println("tick")
+	if now.Sub(x.lastFlush) > time.Second*time.Duration(x.flushInterval) {
+		if err := x.flush(); err != nil {
+			return err
+		}
+	}
 	return nil
 }

@@ -107,6 +107,11 @@ func (x *PacketProcessor) Put(pkt *packetData) error {
 
 // Tick involves timer handler to manage timeout process.
 func (x *PacketProcessor) Tick(now time.Time) error {
+	if x.emitter != nil {
+		if err := x.emitter.tick(now); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
