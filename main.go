@@ -115,6 +115,11 @@ func main() {
 			Usage:       "Threshold of record number to flush object to AWS S3 bucket",
 			Destination: &args.EmitterArgs.AwsS3FlushCount,
 		},
+		cli.IntFlag{
+			Name:        "aws-s3-flush-interval",
+			Usage:       "Flush interval (seconds) to AWS S3 bucket",
+			Destination: &args.EmitterArgs.AwsS3FlushInterval,
+		},
 		// == firehoseEmitter
 		cli.StringFlag{
 			Name:        "aws-firehose-name",
@@ -126,6 +131,12 @@ func main() {
 			Usage:       "Threshold of record size to flush object to AWS Firehose",
 			Destination: &args.EmitterArgs.AwsFirehoseFlushSize,
 		},
+		cli.IntFlag{
+			Name:        "aws-firehose-flush-interval",
+			Usage:       "Flush interval (seconds) to AWS Firehose",
+			Destination: &args.EmitterArgs.AwsS3FlushInterval,
+		},
+
 		// Options for Dumper
 		cli.BoolFlag{
 			Name:        "enable-json-text",
