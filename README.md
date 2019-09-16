@@ -23,19 +23,19 @@ go install github.com/m-mizutani/vxcap
 ### Capture traffic and save packet to file as pcap format
 
 ```bash
-vxcap -f pcap --fs-filename your_dump_file.pcap
+vxcap -f pcap -e fs --fs-filename your_dump_file.pcap
 ```
 
 ### Capture traffic and save packet to AWS S3 Bucket as json record
 
 ```bash
-vxcap -f json --aws-region ap-northeast-1 --aws-s3-bucket your-bucket-name
+vxcap -f json -e s3 --aws-region ap-northeast-1 --aws-s3-bucket your-bucket-name
 ```
 
 ### Capture traffic and send packet data to AWS Firehose
 
 ```bash
-vxcap -f json --aws-region ap-northeast-1 --aws-firehose-name your-hose-name
+vxcap -f json -e firehose --aws-region ap-northeast-1 --aws-firehose-name your-hose-name
 ```
 
 ## Options
@@ -69,3 +69,8 @@ vxcap -f json --aws-region ap-northeast-1 --aws-firehose-name your-hose-name
 ```bash
 go test ./...
 ```
+
+## Author and License
+
+- Author: Masayoshi Mizutani mizutani@sfc.wide.ad.jp / [@m_mizutani](https://twitter.com/m_mizutani)
+- [MIT License](./LICENSE)
