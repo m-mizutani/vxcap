@@ -254,6 +254,9 @@ func TestProcessorJsonFirehoseOutput(t *testing.T) {
 	err = json.Unmarshal(mock.Input[0].Records[0].Data, &jdata)
 	require.NoError(t, err)
 	assert.Equal(t, "167.71.184.66", jdata.SrcAddr)
+
+	// Check for no newline code.
+	assert.Equal(t, 0, strings.Count(string(mock.Input[0].Records[0].Data), "\n"))
 }
 
 func TestProcessorJsonFirehoseFlushSize(t *testing.T) {
@@ -312,7 +315,8 @@ func TestProcessorJsonFirehoseFlushInterval(t *testing.T) {
 		require.NoError(t, proc.Put(pkt))
 	}
 	feature := now.Add(3 * time.Second)
-	proc.Tick(feature)
+	err = proc.Tick(feature)
+	require.NoError(t, err)
 
 	// Emitter must flushes record after 3 second even if processer have not shutdown.
 	assert.Equal(t, 1, len(mock.Input))

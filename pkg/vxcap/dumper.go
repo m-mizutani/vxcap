@@ -29,8 +29,9 @@ type DumperArguments struct {
 }
 
 var dumperMap = map[dumperKey]dumperConstructor{
-	{Format: "json", Target: "packet"}: newJSONPacketDumper,
-	{Format: "pcap", Target: "packet"}: newPcapDumper,
+	{Format: "json", Target: "packet"}:   newJSONPacketDumper,
+	{Format: "ndjson", Target: "packet"}: newNdJSONPacketDumper,
+	{Format: "pcap", Target: "packet"}:   newPcapDumper,
 }
 
 type dumperKey struct {
@@ -58,11 +59,17 @@ func (x *baseDumper) close(io.Writer) error { return nil }
 
 type jsonPacketDumper struct {
 	baseDumper
-	args DumperArguments
+	args    DumperArguments
+	newline bool
 }
 
 func newJSONPacketDumper(args DumperArguments) dumper {
-	return &jsonPacketDumper{args: args}
+	return &jsonPacketDumper{args: args, newline: false}
+}
+
+// NdJSON stands for Newline Delimitered JSON. This dumper add a new line "\n" between JSON records.
+func newNdJSONPacketDumper(args DumperArguments) dumper {
+	return &jsonPacketDumper{args: args, newline: true}
 }
 
 type jsonRecord struct {
@@ -126,8 +133,10 @@ func (x *jsonPacketDumper) dump(packets []*packetData, w io.Writer) error {
 		if _, err := w.Write(data); err != nil {
 			return errors.Wrap(err, "Fail to write JSON data")
 		}
-		if _, err := w.Write([]byte("\n")); err != nil {
-			return errors.Wrap(err, "Fail to write JSON data (LF)")
+		if x.newline {
+			if _, err := w.Write([]byte("\n")); err != nil {
+				return errors.Wrap(err, "Fail to write JSON data (LF)")
+			}
 		}
 	}
 

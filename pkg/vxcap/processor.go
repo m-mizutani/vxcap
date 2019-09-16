@@ -3,6 +3,8 @@ package vxcap
 import (
 	"fmt"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 // Processor is interface of packet processing main feature.
@@ -33,16 +35,17 @@ type emitterModeKey struct {
 	Target  string
 }
 type emitterParams struct {
-	Mode      string
-	Extension string
+	Mode            string
+	Extension       string
+	OverwriteFormat string
 }
 
 var emitterModeMap = map[emitterModeKey]emitterParams{
-	{Emitter: "fs", Format: "pcap", Target: "packet"}:       {"stream", "pcap"},
-	{Emitter: "fs", Format: "json", Target: "packet"}:       {"stream", "json"},
-	{Emitter: "s3", Format: "pcap", Target: "packet"}:       {"stream", "pcap"},
-	{Emitter: "s3", Format: "json", Target: "packet"}:       {"stream", "json"},
-	{Emitter: "firehose", Format: "json", Target: "packet"}: {"stream", "json"},
+	{Emitter: "fs", Format: "pcap", Target: "packet"}:       {"stream", "pcap", ""},
+	{Emitter: "fs", Format: "json", Target: "packet"}:       {"stream", "json", "ndjson"},
+	{Emitter: "s3", Format: "pcap", Target: "packet"}:       {"stream", "pcap", ""},
+	{Emitter: "s3", Format: "json", Target: "packet"}:       {"stream", "json", "ndjson"},
+	{Emitter: "firehose", Format: "json", Target: "packet"}: {"stream", "json", ""},
 }
 
 // NewPacketProcessor is constructor of PacketProcessor. Not only creating instance
@@ -54,6 +57,11 @@ func NewPacketProcessor(args PacketProcessorArgument) (*PacketProcessor, error) 
 		Format:  args.DumperArgs.Format,
 		Target:  args.DumperArgs.Target,
 	}
+	Logger.WithFields(logrus.Fields{
+		"emitter": args.EmitterArgs.Name,
+		"format":  args.DumperArgs.Format,
+		"target":  args.DumperArgs.Target,
+	}).Info("Configure PacketProcessor")
 
 	params, ok := emitterModeMap[modeKey]
 	if !ok {
@@ -61,7 +69,20 @@ func NewPacketProcessor(args PacketProcessorArgument) (*PacketProcessor, error) 
 	}
 	args.EmitterArgs.mode = params.Mode
 	args.EmitterArgs.extension = params.Extension
+	Logger.WithFields(logrus.Fields{
+		"emitMode":        params.Mode,
+		"extention":       params.Extension,
+		"overwriteForamt": params.OverwriteFormat,
+	}).Debug("Got parameters regarding emitter")
 
+	// Overwrite dumper foramt if required.
+	if params.OverwriteFormat != "" {
+		Logger.WithFields(logrus.Fields{
+			"before": args.DumperArgs.Format,
+			"after":  params.OverwriteFormat,
+		}).Debug("Format will be overwritten")
+		args.DumperArgs.Format = params.OverwriteFormat
+	}
 	// construct dumper and emitter
 	dumper, err := newDumper(args.DumperArgs)
 	if err != nil {
@@ -84,6 +105,12 @@ func NewPacketProcessor(args PacketProcessorArgument) (*PacketProcessor, error) 
 
 // Setup must be invoked before calling Put()
 func (x *PacketProcessor) Setup() error {
+	if x.emitter == nil {
+		Logger.Warn("Emitter is not set and the processor will be fail when calling Put(). " +
+			"This is allowed for only debugging and testing.")
+		return nil
+	}
+
 	if err := x.emitter.setup(); err != nil {
 		return err
 	}

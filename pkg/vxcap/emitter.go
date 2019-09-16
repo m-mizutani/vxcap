@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/firehose"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/sirupsen/logrus"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -168,12 +169,19 @@ func newFsStreamEmitter(args EmitterArguments) (recordEmitter, error) {
 		emitter.FileName = args.FsFileName
 	}
 
+	Logger.WithFields(logrus.Fields{
+		"dirpath":  emitter.DirPath,
+		"fileName": emitter.FileName,
+	}).Info("Configured FileSystem Emitter (Stream)")
+
 	return &emitter, nil
 }
 
 func (x *fsStreamEmitter) emit(packets []*packetData) error {
 	if x.fd == nil {
-		fd, err := os.Create(filepath.Join(x.DirPath, x.FileName))
+		path := filepath.Join(x.DirPath, x.FileName)
+		Logger.WithField("filepath", path).Debug("Opening output file")
+		fd, err := os.Create(path)
 		if err != nil {
 			return errors.Wrap(err, "Fail to create a dump file for emitter")
 		}
@@ -228,9 +236,20 @@ func newS3StreamEmitter(args EmitterArguments) (recordEmitter, error) {
 	if args.AwsS3FlushCount > 0 {
 		emitter.flushCount = args.AwsS3FlushCount
 	}
+
 	if args.AwsS3FlushInterval > 0 {
 		emitter.flushInterval = args.AwsS3FlushInterval
 	}
+
+	Logger.WithFields(logrus.Fields{
+		"region":        emitter.Argument.AwsRegion,
+		"S3Bucket":      emitter.Argument.AwsS3Bucket,
+		"S3Prefix":      emitter.Argument.AwsS3Prefix,
+		"addTimeKey":    emitter.Argument.AwsS3AddTimeKey,
+		"flushCount":    emitter.flushCount,
+		"flushInterval": emitter.flushInterval,
+	}).Info("Configured AWS S3 Emitter")
+
 	return &emitter, nil
 }
 
@@ -239,6 +258,8 @@ func (x *s3StreamEmitter) flush() error {
 	if len(x.pktBuffer) == 0 {
 		return nil
 	}
+
+	Logger.WithField("bufferLength", len(x.pktBuffer)).Trace("trying flush to S3")
 
 	reader, writer := io.Pipe()
 	errCh := make(chan error)
@@ -288,7 +309,11 @@ func (x *s3StreamEmitter) flush() error {
 		return err
 	}
 
-	Logger.WithField("resp", resp).Debug("Uploaded S3 object")
+	Logger.WithFields(logrus.Fields{
+		"s3resp": resp,
+		"bucket": x.Argument.AwsS3Bucket,
+		"key":    s3Key,
+	}).Trace("Flushed data to S3")
 
 	return nil
 }
@@ -348,7 +373,8 @@ type firehoseEmitter struct {
 }
 
 func newFirehoseEmitter(args EmitterArguments) (recordEmitter, error) {
-	e := firehoseEmitter{
+
+	emitter := firehoseEmitter{
 		Argument:      args,
 		flushSize:     DefaultAwsFirehoseFlushSize,
 		flushInterval: DefaultAwsFIrehoseFlushInterval,
@@ -356,16 +382,25 @@ func newFirehoseEmitter(args EmitterArguments) (recordEmitter, error) {
 	}
 
 	if args.AwsFirehoseFlushSize > 0 {
-		e.flushSize = args.AwsFirehoseFlushSize
+		emitter.flushSize = args.AwsFirehoseFlushSize
 	}
 	if args.AwsFirehoseFlushInterval > 0 {
-		e.flushInterval = args.AwsFirehoseFlushInterval
+		emitter.flushInterval = args.AwsFirehoseFlushInterval
 	}
 
-	return &e, nil
+	Logger.WithFields(logrus.Fields{
+		"region":        emitter.Argument.AwsRegion,
+		"name":          emitter.Argument.AwsFirehoseName,
+		"flushSize":     emitter.flushSize,
+		"flushInterval": emitter.flushInterval,
+	}).Info("Configured AWS Firehose Emitter")
+
+	return &emitter, nil
 }
 
 func (x *firehoseEmitter) flush() error {
+	Logger.WithField("bufferLength", len(x.pktBuffer)).Trace("trying flush to Firehose")
+
 	x.lastFlush = time.Now()
 	if len(x.pktBuffer) == 0 {
 		return nil
@@ -392,6 +427,10 @@ func (x *firehoseEmitter) flush() error {
 
 	x.pktBuffer = [][]byte{}
 	x.pktBufferSize = 0
+
+	Logger.WithFields(logrus.Fields{
+		"recordNum": len(records),
+	}).Trace("Flushed data to Firehose")
 
 	return nil
 }
@@ -431,7 +470,6 @@ func (x *firehoseEmitter) teardown() error {
 }
 
 func (x *firehoseEmitter) tick(now time.Time) error {
-	fmt.Println("tick")
 	if now.Sub(x.lastFlush) > time.Second*time.Duration(x.flushInterval) {
 		if err := x.flush(); err != nil {
 			return err

@@ -1,7 +1,6 @@
 package vxcap
 
 import (
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -36,20 +35,29 @@ func New() *VXCap {
 
 // Start invokes UDP listener for VXLAN and forward captured packets to processor.
 func (x *VXCap) Start(proc Processor) error {
+	Logger.Trace("Setting up processor...")
 	if err := proc.Setup(); err != nil {
 		return err
 	}
 
 	// Setup channels
+	Logger.WithFields(logrus.Fields{
+		"port":      x.RecvPort,
+		"queueSize": x.QueueSize,
+	}).Trace("Opening UDP port...")
 	queueCh := listenVXLAN(x.RecvPort, x.QueueSize)
 
+	Logger.Trace("Setting up channels")
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	tickerCh := ticker.C
 
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGTERM)
+	signal.Notify(signalCh, syscall.SIGINT)
 	defer signal.Stop(signalCh)
+
+	Logger.Infof("Starting loop: port %d", x.RecvPort)
 
 MainLoop:
 	for {
@@ -64,19 +72,20 @@ MainLoop:
 			}
 
 		case t := <-tickerCh:
-			fmt.Println("ticker")
 			if err := proc.Tick(t); err != nil {
 				return errors.Wrap(err, "Fail in tick process")
 			}
 
 		case s := <-signalCh:
-			Logger.WithField("signal", s).Warn("Caught signal (should be SIGTERM")
+			Logger.WithField("signal", s).Warn("Caught signal, Shutting down...")
 			if err := proc.Shutdown(); err != nil {
 				return errors.Wrap(err, "Fail in shutdown process")
 			}
 			break MainLoop
 		}
 	}
+
+	Logger.Info("Exit normally")
 
 	return nil
 }
