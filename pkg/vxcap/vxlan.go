@@ -1,36 +1,34 @@
-package main
+package vxcap
 
 import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
 	"net"
-	"time"
 
 	"github.com/pkg/errors"
 )
 
-type queue struct {
-	Pkt *packetRecord
+type udpQueue struct {
+	Pkt *packetData
 	Err error
 }
 
 const (
-	defaultReceiverQueueSize = 1024
-	defaultVxlanPort         = 4789
+	// DefaultReceiverQueueSize is default queue size of channel from UDP server to packet processor.
+	DefaultReceiverQueueSize = 1024
+	// DefaultVxlanPort is port number of UDP server to receive VXLAN datagram.
+	DefaultVxlanPort = 4789
 
 	vxlanHeaderLength = 8
 )
 
-func parseVXLAN(raw []byte, length int) (*packetRecord, error) {
+func parseVXLAN(raw []byte, length int) (*packetData, error) {
 	if length < vxlanHeaderLength {
 		return nil, fmt.Errorf("Too short data for VXLAN header: %d", length)
 	}
 
-	pkt := new(packetRecord)
-	pkt.Timestamp = time.Now()
-	pkt.Data = make([]byte, length-vxlanHeaderLength)
-	copy(pkt.Data, raw[vxlanHeaderLength:length])
+	pkt := newPacketData(raw[vxlanHeaderLength:length])
 
 	buffer := bytes.NewBuffer(raw)
 	if err := binary.Read(buffer, binary.BigEndian, &pkt.Header); err != nil {
@@ -40,15 +38,15 @@ func parseVXLAN(raw []byte, length int) (*packetRecord, error) {
 	return pkt, nil
 }
 
-func listenVXLAN(port, queueSize int) chan *queue {
-	ch := make(chan *queue, queueSize)
+func listenVXLAN(port, queueSize int) chan *udpQueue {
+	ch := make(chan *udpQueue, queueSize)
 
 	go func() {
 		defer close(ch)
 
 		sock, err := net.ListenPacket("udp", fmt.Sprintf(":%d", port))
 		if err != nil {
-			ch <- &queue{Err: errors.Wrap(err, "Fail to create UDP socket")}
+			ch <- &udpQueue{Err: errors.Wrap(err, "Fail to create UDP socket")}
 			return
 		}
 		defer sock.Close()
@@ -58,16 +56,17 @@ func listenVXLAN(port, queueSize int) chan *queue {
 		for {
 			n, _, err := sock.ReadFrom(buf)
 			if err != nil {
-				ch <- &queue{Err: errors.Wrap(err, "Fail to read UDP data")}
+				ch <- &udpQueue{Err: errors.Wrap(err, "Fail to read UDP data")}
 				return
 			}
 
 			pkt, err := parseVXLAN(buf, n)
 			if err != nil {
-				logger.WithError(err).Warn("Fail to parse VXLAN data")
+				Logger.WithError(err).Warn("Fail to parse VXLAN data")
+				continue
 			}
 
-			q := new(queue)
+			q := new(udpQueue)
 			q.Pkt = pkt
 			ch <- q
 		}

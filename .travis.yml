@@ -1,5 +1,10 @@
 dist: xenial
 language: go
+sudo: false
+addons:
+  apt:
+    packages:
+    - tcpdump
 
 env: GO111MODULE=on
 
@@ -13,9 +18,9 @@ git:
 notifications:
   email: false
 
-#before_script:
-#  - go install github.com/golangci/golangci-lint/cmd/golangci-lint
+before_script:
+  - go install github.com/golangci/golangci-lint/cmd/golangci-lint
 
 script:
-#  - golangci-lint run
-  - go test -v
+  - golangci-lint run
+  - go test -v ./...

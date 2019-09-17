@@ -1,1 +1,3 @@
-vxcap
+*.pcap
+*.json
+*.env
