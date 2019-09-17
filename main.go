@@ -9,7 +9,7 @@ import (
 	"github.com/urfave/cli"
 )
 
-const vxcapVersion = "0.0.1"
+const vxcapVersion = "0.1.0"
 
 var logLevelMap = map[string]logrus.Level{
 	"trace": logrus.TraceLevel,
